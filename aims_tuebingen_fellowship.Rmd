@@ -50,19 +50,12 @@ library(tidytext)
 ```
 
 
-```{r}
-#set the working directory
-
-setwd("C:/Users/USER/Documents/Research project tubingen/R_project_tuebingen/")
-
-```
-
 
 ```{r}
 #loading the shape files
-shp_ben <- read_sf("ben_data/BEN_shape_file/gadm41_BEN_3.shp")
-shp_con <- read_sf("cong_data/CON_shape_file/cog_admin2.shp")
-shp_cmr <- read_sf("cmr_data/CMR_shape_file/cameroun_districts_2024.shp")
+shp_ben <- read_sf("data/ben_data/BEN_shape_file/gadm41_BEN_3.shp")
+shp_con <- read_sf("data/cong_data/CON_shape_file/cog_admin2.shp")
+shp_cmr <- read_sf("data/cmr_data/CMR_shape_file/cameroun_districts_2024.shp")
 
 
 #renaming the districts
@@ -82,13 +75,13 @@ con_vect <- vect(shp_con)
 ```{r}
 # Loading the data
 
-BEN_df <- read_excel("COMAL data Benin&Congo.xlsx", sheet = 1)
+BEN_df <- read_excel("data/COMAL data Benin&Congo.xlsx", sheet = 1)
 
-CON_df <- read_excel("COMAL data Benin&Congo.xlsx", sheet = 2)
+CON_df <- read_excel("data/COMAL data Benin&Congo.xlsx", sheet = 2)
 
-CMR_df <- read_excel("cmr_data/Cameroon2.xlsx")
+CMR_df <- read_excel("data/cmr_data/Cameroon2.xlsx")
 
-GAB_df <- read_excel("gab_data/Gabon2.xlsx")
+GAB_df <- read_excel("data/gab_data/Gabon2.xlsx")
 
 ```
 
@@ -244,7 +237,7 @@ boxplot_Ct_Age_Ben <- ggplot(data = BEN_Ct %>% filter(Ct_value_pm != 0), aes(x= 
        x     = "Age group",
        y     = "PCR Ct value")
 
-ggsave("ben_data/Ct_Age_Ben.png", plot = boxplot_Ct_Age_Ben, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/ben_output/Ct_Age_Ben.png", plot = boxplot_Ct_Age_Ben, width = 6, height = 4, dpi = 300)
 
 
 boxplot_Ct_Age_CONG <- ggplot(data = CONG_Ct %>% filter(Ct_value_pm != 0), aes(x= Age_group, y = Ct_value_pm,
@@ -257,7 +250,7 @@ boxplot_Ct_Age_CONG <- ggplot(data = CONG_Ct %>% filter(Ct_value_pm != 0), aes(x
        x     = "Age group",
        y     = "PCR Ct value")
 
-ggsave("cong_data/Ct_Age_CONG.png", plot = boxplot_Ct_Age_CONG, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cong_output/Ct_Age_CONG.png", plot = boxplot_Ct_Age_CONG, width = 6, height = 4, dpi = 300)
 
 
 boxplot_Ct_Age_CMR <- ggplot(data = CMR_Ct %>% filter(Ct_value_pm != 0), aes(x= Age_group, y = Ct_value_pm,
@@ -270,7 +263,7 @@ boxplot_Ct_Age_CMR <- ggplot(data = CMR_Ct %>% filter(Ct_value_pm != 0), aes(x= 
        x     = "Age group",
        y     = "PCR Ct value")
 
-ggsave("cmr_data/Ct_Age_CMR.png", plot = boxplot_Ct_Age_CMR, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cmr_output/Ct_Age_CMR.png", plot = boxplot_Ct_Age_CMR, width = 6, height = 4, dpi = 300)
 
 
 boxplot_Ct_Age_GAB <- ggplot(data = GAB_Ct %>% filter(Ct_value_pm != 0), aes(x= Age_group, y = Ct_value_pm,
@@ -283,7 +276,7 @@ boxplot_Ct_Age_GAB <- ggplot(data = GAB_Ct %>% filter(Ct_value_pm != 0), aes(x= 
        x     = "Age group",
        y     = "PCR Ct value")
 
-ggsave("gab_data/Ct_Age_CMR.png", plot = boxplot_Ct_Age_GAB, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/gab_output/Ct_Age_GAB.png", plot = boxplot_Ct_Age_GAB, width = 6, height = 4, dpi = 300)
 
 ```
 - In Benin the `10<20` age group is the one with the lowest Ct value meaning they 
@@ -563,7 +556,7 @@ raw_pr_cmr <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/raw_obs_PR_cmr.pdf", plot = raw_pr_cmr, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cmr_output/raw_obs_PR_cmr.pdf", plot = raw_pr_cmr, width = 6, height = 4, dpi = 300)
 
 sampled_site_cmr <- shp_cmr %>% 
   filter(Admin2 == "Bankim")
@@ -578,7 +571,7 @@ sample_district <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/raw_obs_PR_sampled_location_cmr.pdf", plot = sample_district, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cmr_output/raw_obs_PR_sampled_location_cmr.pdf", plot = sample_district, width = 6, height = 4, dpi = 300)
 
 
 mapview(shp_cmr,
@@ -662,7 +655,7 @@ PR_obs_ben <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/PR_p_malariae_observed.pdf", plot = PR_obs_ben, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/ben_output/PR_p_malariae_observed.pdf", plot = PR_obs_ben, width = 6, height = 4, dpi = 300)
 
 
 sampled_site_ben <- shp_ben %>% 
@@ -680,7 +673,7 @@ Raw_PR_sampled_location_ben <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/Raw_PR_sampled_location.pdf", plot = Raw_PR_sampled_location_ben,
+ggsave("Outputs/ben_output/Raw_PR_sampled_location.pdf", plot = Raw_PR_sampled_location_ben,
        width = 6, height = 4, dpi = 300)
 
 
@@ -749,7 +742,7 @@ raw_pr_cong <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/raw_obs_PR.pdf", plot = raw_pr_cong, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cong_output/raw_obs_PR.pdf", plot = raw_pr_cong, width = 6, height = 4, dpi = 300)
 
 sampled_site_cong <- shp_con %>% 
   filter(adm2_name %in% c("Brazzaville", "Goma-Tsetse"))
@@ -764,7 +757,7 @@ sampled_location_pr_cong <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/raw_obs_PR_sampled_location.pdf", plot = sampled_location_pr_cong, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cong_output/raw_obs_PR_sampled_location.pdf", plot = sampled_location_pr_cong, width = 6, height = 4, dpi = 300)
 
 mapview(shp_con,
         col.regions = "white",
@@ -783,9 +776,9 @@ mapview(spatial_data_cong,
 # loading covariates and extract them at the sample location Benin
 
 ```{r}
-path1 <- "CHIRPS_PENTAD_precipitation_2021-01-01_2021-12-31_0p9311to13p9448N_8p2516to17p0602E.precipitation.tif"
-path2 <- "ERA5_LAND_DAILY_temperature_2m_2021-01-01_2021-12-31_1p1068to13p6033N_8p1637to16p8844E.temperature_2m.tif"
-ndvi_path <- "ben_data/NDVI2021/"
+path1 <- "data/CHIRPS_PENTAD_precipitation_2021-01-01_2021-12-31_0p9311to13p9448N_8p2516to17p0602E.precipitation.tif"
+path2 <- "data/ERA5_LAND_DAILY_temperature_2m_2021-01-01_2021-12-31_1p1068to13p6033N_8p1637to16p8844E.temperature_2m.tif"
+ndvi_path <- "data/ben_data/NDVI2021/"
 # Load all 12 monthly NDVI tif files
 ndvi_files <- list.files(
   ndvi_path,
@@ -793,25 +786,36 @@ ndvi_files <- list.files(
   full.names = TRUE
 )
 
-land_cover_water <- rast("ben_data/landuse/WorldCover_water_30s.tif")
-land_cover_trees <- rast("ben_data/landuse/WorldCover_trees_30s.tif")
-land_cover_builts <- rast("ben_data/landuse/WorldCover_built_30s.tif")
-land_cover_cropland <- rast("ben_data/landuse/WorldCover_cropland_30s.tif")
-land_cover_wetland <- rast("ben_data/landuse/WorldCover_wetland_30s.tif")
+land_cover_water <- rast("data/ben_data/landuse/WorldCover_water_30s.tif")
+land_cover_trees <- rast("data/ben_data/landuse/WorldCover_trees_30s.tif")
+land_cover_builts <- rast("data/ben_data/landuse/WorldCover_built_30s.tif")
+land_cover_cropland <- rast("data/ben_data/landuse/WorldCover_cropland_30s.tif")
+land_cover_wetland <- rast("data/ben_data/landuse/WorldCover_wetland_30s.tif")
 
 
-ITN_intervention_2021 <- rast("ITN_2000/2025_GBD2024_Africa_ITN_2021.tif")
+ITN_intervention_2021 <- rast("data/ITN_2000/2025_GBD2024_Africa_ITN_2021.tif")
 
-ben_pop <- rast("ben_data/ben_pd_2020_1km_UNadj.tif")
+ben_pop <- rast("data/ben_data/ben_pd_2020_1km_UNadj.tif")
 ben_rainfall_2021 <- rast(path1)
 ben_temperature_2021 <- rast(path2)
-elevation_ben <- rast("ben_data/elevation/BEN_elv_msk.tif")
-ben_land_cover_water <- rast("ben_data/landuse/WorldCover_water_30s.tif")
-ben_land_cover_built <- rast("ben_data/landuse/WorldCover_built_30s.tif")
-ben_land_cover_cropland <- rast("ben_data/landuse/WorldCover_cropland_30s.tif")
-ben_land_cover_trees <- rast("ben_data/landuse/WorldCover_trees_30s.tif")
-ben_land_cover_wetland <- rast("ben_data/landuse/WorldCover_wetland_30s.tif")
+elevation_ben <- rast("data/ben_data/elevation/BEN_elv_msk.tif")
 ben_ndvi_stack<- rast(ndvi_files)
+
+ben_land_cover_water <- crop(land_cover_water, ben_vect)
+ben_land_cover_water <- mask(cmr_land_cover_water, ben_vect)
+
+ben_land_cover_built <- crop(land_cover_builts, ben_vect)
+ben_land_cover_built <- mask(cmr_land_cover_built, ben_vect)
+
+ben_land_cover_cropland <- crop(land_cover_cropland, ben_vect)
+ben_land_cover_cropland <- mask(cmr_land_cover_cropland, ben_vect)
+
+ben_land_cover_trees <- crop(land_cover_trees, ben_vect)
+ben_land_cover_trees <- mask(cmr_land_cover_trees, ben_vect)
+
+ben_land_cover_wetland <- crop(land_cover_wetland, ben_vect)
+ben_land_cover_wetland <- mask(cmr_land_cover_wetland, ben_vect)
+
 
 # Benin case
 
@@ -847,6 +851,7 @@ ben_rainfall_2021 <- project(ben_rainfall_2021, st_crs(spatial_data_ben)$wkt)
 ben_temperature_2021 <- project(ben_temperature_2021, st_crs(spatial_data_ben)$wkt)
 ben_ndvi_stack <- project(ben_ndvi_stack, st_crs(spatial_data_ben)$wkt)
 elevation_ben   <- project(elevation_ben,   st_crs(spatial_data_ben)$wkt)
+
 ben_land_cover_water   <- project(ben_land_cover_water,   st_crs(spatial_data_ben)$wkt)
 ben_land_cover_built   <- project(ben_land_cover_built,   st_crs(spatial_data_ben)$wkt)
 ben_land_cover_cropland   <- project(ben_land_cover_cropland,   st_crs(spatial_data_ben)$wkt)
@@ -885,35 +890,30 @@ spatial_data_ben_sf <- spatial_data_ben %>%
 
 # distance to water
 
-# Load HydroRIVERS Africa
-rivers <- st_read("HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp")
+bbox <- st_bbox(shp_ben)
 
-# Load HydroLAKES Africa
-lakes  <- st_read("HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp")
 
-#rivers <- st_transform(rivers, st_crs(spatial_data_ben_sf))
-#lakes  <- st_transform(lakes,  st_crs(spatial_data_ben_sf))
+rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
+                  wkt_filter = st_as_text(st_as_sfc(bbox)))
+
+lakes  <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+                  wkt_filter = st_as_text(st_as_sfc(bbox)))
 
 rivers_valid <- st_make_valid(rivers)
 lakes_valid  <- st_make_valid(lakes)
 
-shp_ben_country <- shp_ben %>% 
-  group_by(COUNTRY) %>% 
-  summarise(geometry = st_union(geometry))
+rivers_valid <- ms_simplify(rivers_valid, keep = 0.3, keep_shapes = TRUE)
+lakes_valid  <- ms_simplify(lakes_valid,  keep = 0.3, keep_shapes = TRUE)
 
-rivers_small <- st_crop(rivers_valid, shp_ben_country)
-rivers_ben <- st_intersection(rivers_small, shp_ben_country)
-
-lakes_small <- st_crop(lakes_valid, shp_ben_country)
-lakes_ben   <- st_intersection(lakes_small, shp_ben_country)
-
+rivers_valid <- st_transform(rivers_valid, st_crs(shp_ben))
+lakes_valid  <- st_transform(lakes_valid,  st_crs(shp_ben))
 
 # nearest river segment for each point
-nn_riv <- st_nn(spatial_data_ben_sf, rivers_ben, k = 1, returnDist = TRUE)
+nn_riv <- st_nn(spatial_data_ben_sf, rivers_valid, k = 1, returnDist = TRUE)
 dist_riv_min <- sapply(nn_riv$dist, `[`, 1)
 
 # nearest lake polygon for each point
-nn_lake <- st_nn(spatial_data_ben_sf, lakes_ben, k = 1, returnDist = TRUE)
+nn_lake <- st_nn(spatial_data_ben_sf, lakes_valid, k = 1, returnDist = TRUE)
 dist_lake_min <- sapply(nn_lake$dist, `[`, 1)
 
 spatial_data_ben_sf$dist_to_water <- pmin(dist_riv_min, dist_lake_min)
@@ -932,7 +932,7 @@ get_first_non_na <- function(values, neighbors) {
   for (i in neighbors) {
     if (!is.na(values[i])) return(values[i])
   }
-  return(NA)   # si vraiment aucun voisin n'a de valeur
+  return(NA)   
 }
 
 var <- "annual_temperature_2021"
@@ -946,15 +946,15 @@ for (i in missing) {
 
 spatial_data_ben_sf$annual_temperature_2021 <- spatial_data_ben_df$annual_temperature_2021
 
-st_write(spatial_data_ben_sf, "ben_data/spatial_data_ben_sf.gpkg", append = FALSE)
+st_write(spatial_data_ben_sf, "data/ben_data/spatial_data_ben_sf.gpkg", append = FALSE)
 
 
 # Congo case
 
-Cong_pop <- rast("cong_data/cog_pd_2020_1km_UNadj.tif")
+Cong_pop <- rast("data/cong_data/cog_pd_2020_1km_UNadj.tif")
 
-elevation_Cong <- rast("cong_data/elevation/COG_elv_msk.tif")
-ndvi_path <- "cong_data/NDVI2021/"
+elevation_Cong <- rast("data/cong_data/elevation/COG_elv_msk.tif")
+ndvi_path <- "data/cong_data/NDVI2021/"
 # Load all 12 monthly NDVI tif files
 ndvi_files <- list.files(
   ndvi_path,
@@ -990,6 +990,21 @@ cong_pop_density_2020_df_buffer <- terra::extract(Cong_pop,
                                                  fun = mean,
                                                  na.rm = TRUE)
 
+Cong_land_cover_water <- crop(land_cover_water, con_vect)
+Cong_land_cover_water <- mask(cmr_land_cover_water, con_vect)
+
+Cong_land_cover_built <- crop(land_cover_builts, con_vect)
+Cong_land_cover_built <- mask(cmr_land_cover_built, con_vect)
+
+Cong_land_cover_cropland <- crop(land_cover_cropland, con_vect)
+Cong_land_cover_cropland <- mask(cmr_land_cover_cropland, con_vect)
+
+Cong_land_cover_trees <- crop(land_cover_trees, con_vect)
+Cong_land_cover_trees <- mask(cmr_land_cover_trees, con_vect)
+
+Cong_land_cover_wetland <- crop(land_cover_wetland, con_vect)
+Cong_land_cover_wetland <- mask(cmr_land_cover_wetland, con_vect)
+
 
 Cong_ITN_intervention_2021  <- project(ITN_intervention_2021,  st_crs(spatial_data_cong)$wkt)
 Cong_pop  <- project(Cong_pop,  st_crs(spatial_data_cong)$wkt)
@@ -997,11 +1012,11 @@ Cong_rainfall_2021 <- project(ben_rainfall_2021, st_crs(spatial_data_cong)$wkt)
 Cong_temperature_2021 <- project(ben_temperature_2021, st_crs(spatial_data_cong)$wkt)
 Cong_ndvi_stack <- project(Cong_ndvi_stack, st_crs(spatial_data_cong)$wkt)
 elevation_Cong   <- project(elevation_Cong,   st_crs(spatial_data_cong)$wkt)
-Cong_land_cover_water   <- project(ben_land_cover_water,   st_crs(spatial_data_cong)$wkt)
-Cong_land_cover_built   <- project(ben_land_cover_built,   st_crs(spatial_data_cong)$wkt)
-Cong_land_cover_cropland   <- project(ben_land_cover_cropland,   st_crs(spatial_data_cong)$wkt)
-Cong_land_cover_trees   <- project(ben_land_cover_trees,   st_crs(spatial_data_cong)$wkt)
-Cong_land_cover_wetland   <- project(ben_land_cover_wetland,   st_crs(spatial_data_cong)$wkt)
+Cong_land_cover_water   <- project(Cong_land_cover_water,   st_crs(spatial_data_cong)$wkt)
+Cong_land_cover_built   <- project(Cong_land_cover_built,   st_crs(spatial_data_cong)$wkt)
+Cong_land_cover_cropland   <- project(Cong_land_cover_cropland,   st_crs(spatial_data_cong)$wkt)
+Cong_land_cover_trees   <- project(Cong_land_cover_trees,   st_crs(spatial_data_cong)$wkt)
+Cong_land_cover_wetland   <- project(Cong_land_cover_wetland,   st_crs(spatial_data_cong)$wkt)
 
 Cong_ITN_intervention_2021_df <- terra::extract(Cong_ITN_intervention_2021,  spatial_data_cong)
 Cong_pop_density_2020_df <- terra::extract(Cong_pop,  spatial_data_cong)
@@ -1020,19 +1035,32 @@ shp_cong_country <- shp_con %>%
   group_by(adm0_name) %>% 
   summarise(geometry = st_union(geometry))
 
-rivers_small <- st_crop(rivers_valid, shp_cong_country)
-rivers_cong <- st_intersection(rivers_small, shp_cong_country)
 
-lakes_small <- st_crop(lakes_valid, shp_cong_country)
-lakes_cong   <- st_intersection(lakes_small, shp_cong_country)
+bbox <- st_bbox(shp_con)
+
+
+rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
+                  wkt_filter = st_as_text(st_as_sfc(bbox)))
+
+lakes  <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+                  wkt_filter = st_as_text(st_as_sfc(bbox)))
+
+rivers_valid <- st_make_valid(rivers)
+lakes_valid  <- st_make_valid(lakes)
+
+rivers_valid <- ms_simplify(rivers_valid, keep = 0.3, keep_shapes = TRUE)
+lakes_valid  <- ms_simplify(lakes_valid,  keep = 0.3, keep_shapes = TRUE)
+
+rivers_valid <- st_transform(rivers_valid, st_crs(shp_con))
+lakes_valid  <- st_transform(lakes_valid,  st_crs(shp_con))
 
 
 # nearest river segment for each point
-nn_riv <- st_nn(spatial_data_cong, rivers_cong, k = 1, returnDist = TRUE)
+nn_riv <- st_nn(spatial_data_cong, rivers_valid, k = 1, returnDist = TRUE)
 dist_riv_min <- sapply(nn_riv$dist, `[`, 1)
 
 # nearest lake polygon for each point
-nn_lake <- st_nn(spatial_data_cong, lakes_cong, k = 1, returnDist = TRUE)
+nn_lake <- st_nn(spatial_data_cong, lakes_valid, k = 1, returnDist = TRUE)
 dist_lake_min <- sapply(nn_lake$dist, `[`, 1)
 
 spatial_data_cong$dist_to_water <- pmin(dist_riv_min, dist_lake_min)
@@ -1053,7 +1081,7 @@ spatial_data_cong <- spatial_data_cong %>%
 spatial_data_cong_df <- spatial_data_cong %>% 
   st_drop_geometry() 
 
-st_write(spatial_data_cong, "cong_data/spatial_data_cong_sf.gpkg", append = FALSE)
+st_write(spatial_data_cong, "data/cong_data/spatial_data_cong_sf.gpkg", append = FALSE)
 
 
 ```
@@ -1062,10 +1090,10 @@ st_write(spatial_data_cong, "cong_data/spatial_data_cong_sf.gpkg", append = FALS
 ```{r}
 # Cameroon case
 
-cmr_pop <- rast("cmr_data/cmr_pd_2011_1km_UNadj.tif")
+cmr_pop <- rast("data/cmr_data/cmr_pd_2011_1km_UNadj.tif")
 
-elevation_cmr <- rast("cmr_data/elevation/CMR_elv_msk.tif")
-ndvi_path <- "cmr_data/NDVI2021/"
+elevation_cmr <- rast("data/cmr_data/elevation/CMR_elv_msk.tif")
+ndvi_path <- "data/cmr_data/NDVI2021/"
 # Load all 12 monthly NDVI tif files
 ndvi_files <- list.files(
   ndvi_path,
@@ -1125,10 +1153,10 @@ shp_cmr_country <- shp_cmr %>%
 bbox <- st_bbox(shp_cmr)
 
 
-rivers <- st_read("HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
+rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
                   wkt_filter = st_as_text(st_as_sfc(bbox)))
 
-lakes  <- st_read("HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+lakes  <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
                   wkt_filter = st_as_text(st_as_sfc(bbox)))
 
 rivers_valid <- st_make_valid(rivers)
@@ -1138,11 +1166,8 @@ rivers_valid <- ms_simplify(rivers_valid, keep = 0.3, keep_shapes = TRUE)
 lakes_valid  <- ms_simplify(lakes_valid,  keep = 0.3, keep_shapes = TRUE)
 
 
-
 rivers_valid <- st_transform(rivers_valid, st_crs(shp_cmr))
 lakes_valid  <- st_transform(lakes_valid,  st_crs(shp_cmr))
-
-
 
 
 # nearest river segment for each point
@@ -1172,7 +1197,7 @@ CMR_df_1_sf_df <- CMR_df_1_sf %>%
   st_drop_geometry() 
 
 
-st_write(CMR_df_1_sf, "cmr_data/CMR_df_1_sf.gpkg", append = FALSE)
+st_write(CMR_df_1_sf, "data/cmr_data/CMR_df_1_sf.gpkg", append = FALSE)
 
 # Cameroon case with clusters of households
 
@@ -1239,7 +1264,7 @@ cluster_data_cmr_sf <- cluster_data_cmr_sf %>%
   dplyr::select(-c(grid_id, lat, lng))
 
 
-st_write(cluster_data_cmr_sf, "cmr_data/cmr_cluster_df_1_sf.gpkg", append = FALSE)
+st_write(cluster_data_cmr_sf, "data/cmr_data/cmr_cluster_df_1_sf.gpkg", append = FALSE)
 ```
 
 
@@ -1247,7 +1272,7 @@ st_write(cluster_data_cmr_sf, "cmr_data/cmr_cluster_df_1_sf.gpkg", append = FALS
 ```{r}
 # Benin
 
-spatial_data_ben_sf <- st_read("ben_data/spatial_data_ben_sf.gpkg")
+spatial_data_ben_sf <- st_read("data/ben_data/spatial_data_ben_sf.gpkg")
 
 dist_water <- ggplot() +
   geom_sf(data = sampled_site_ben, fill = "white", color = "black") +
@@ -1259,7 +1284,7 @@ dist_water <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/dist_water_viz_ben.pdf", plot = dist_water, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/ben_output/dist_water_viz_ben.pdf", plot = dist_water, width = 6, height = 4, dpi = 300)
 
 pop_density <- ggplot() +
   geom_sf(data = sampled_site_ben, fill = "white", color = "black") +
@@ -1271,7 +1296,7 @@ pop_density <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/pop_density_viz_ben.pdf", plot = pop_density, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/ben_output/pop_density_viz_ben.pdf", plot = pop_density, width = 6, height = 4, dpi = 300)
 
 annual_rainfall <- ggplot() +
   geom_sf(data = sampled_site_ben, fill = "white", color = "black") +
@@ -1283,7 +1308,7 @@ annual_rainfall <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/annual_rainfall_viz_ben.pdf", plot = annual_rainfall, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/ben_output/annual_rainfall_viz_ben.pdf", plot = annual_rainfall, width = 6, height = 4, dpi = 300)
 
 annual_temperature <- ggplot() +
   geom_sf(data = sampled_site_ben, fill = "white", color = "black") +
@@ -1295,7 +1320,7 @@ annual_temperature <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/annual_temperature_viz_ben.pdf", plot = annual_temperature, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/ben_output/annual_temperature_viz_ben.pdf", plot = annual_temperature, width = 6, height = 4, dpi = 300)
 
 
 Vegetation_index <- ggplot() +
@@ -1308,7 +1333,7 @@ Vegetation_index <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/Vegetation_index_viz_ben.pdf", plot = Vegetation_index, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/ben_output/Vegetation_index_viz_ben.pdf", plot = Vegetation_index, width = 6, height = 4, dpi = 300)
 
 elevation_ben <- ggplot() +
   geom_sf(data = sampled_site_ben, fill = "white", color = "black") +
@@ -1320,7 +1345,7 @@ elevation_ben <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/elevation_viz_ben.pdf", plot = elevation_ben, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/ben_output/elevation_viz_ben.pdf", plot = elevation_ben, width = 6, height = 4, dpi = 300)
 
 
 
@@ -1330,7 +1355,7 @@ ggsave("ben_data/elevation_viz_ben.pdf", plot = elevation_ben, width = 6, height
 ```{r}
 # congo
 
-spatial_data_cong <- st_read("cong_data/spatial_data_cong_sf.gpkg")
+spatial_data_cong <- st_read("data/cong_data/spatial_data_cong_sf.gpkg")
 
 dist_water <- ggplot() +
   geom_sf(data = sampled_site_cong, fill = "white", color = "black") +
@@ -1342,7 +1367,7 @@ dist_water <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/dist_water_viz_cong.pdf", plot = dist_water, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cong_output/dist_water_viz_cong.pdf", plot = dist_water, width = 6, height = 4, dpi = 300)
 
 pop_density <- ggplot() +
   geom_sf(data = sampled_site_cong, fill = "white", color = "black") +
@@ -1354,7 +1379,7 @@ pop_density <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/pop_density_viz_cong.pdf", plot = pop_density, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cong_output/pop_density_viz_cong.pdf", plot = pop_density, width = 6, height = 4, dpi = 300)
 
 annual_rainfall <- ggplot() +
   geom_sf(data = sampled_site_cong, fill = "white", color = "black") +
@@ -1366,7 +1391,7 @@ annual_rainfall <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/annual_rainfall_viz_cong.pdf", plot = annual_rainfall, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cong_output/annual_rainfall_viz_cong.pdf", plot = annual_rainfall, width = 6, height = 4, dpi = 300)
 
 annual_temperature <- ggplot() +
   geom_sf(data = sampled_site_cong, fill = "white", color = "black") +
@@ -1378,7 +1403,7 @@ annual_temperature <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/annual_temperature_vizcong.pdf", plot = annual_temperature, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cong_output/annual_temperature_vizcong.pdf", plot = annual_temperature, width = 6, height = 4, dpi = 300)
 
 
 Vegetation_index <- ggplot() +
@@ -1391,7 +1416,7 @@ Vegetation_index <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/Vegetation_index_viz_cong.pdf", plot = Vegetation_index, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cong_output/Vegetation_index_viz_cong.pdf", plot = Vegetation_index, width = 6, height = 4, dpi = 300)
 
 
 elevation_cong <- ggplot() +
@@ -1404,7 +1429,7 @@ elevation_cong <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/elevation_viz_cong.pdf", plot = elevation_cong, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cong_output/elevation_viz_cong.pdf", plot = elevation_cong, width = 6, height = 4, dpi = 300)
 
 
 ```
@@ -1413,7 +1438,7 @@ ggsave("cong_data/elevation_viz_cong.pdf", plot = elevation_cong, width = 6, hei
 ```{r}
 # Cameroon
 
-spatial_data_cmr <- st_read("cmr_data/cmr_cluster_df_1_sf.gpkg")
+spatial_data_cmr <- st_read("data/cmr_data/cmr_cluster_df_1_sf.gpkg")
 
 dist_water <- ggplot() +
   geom_sf(data = sampled_site_cmr, fill = "white", color = "black") +
@@ -1425,7 +1450,7 @@ dist_water <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/dist_water_viz_cmr.pdf", plot = dist_water, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cmr_output/dist_water_viz_cmr.pdf", plot = dist_water, width = 6, height = 4, dpi = 300)
 
 pop_density <- ggplot() +
   geom_sf(data = sampled_site_cmr, fill = "white", color = "black") +
@@ -1437,7 +1462,7 @@ pop_density <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/pop_density_viz_cmr.pdf", plot = pop_density, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cmr_output/pop_density_viz_cmr.pdf", plot = pop_density, width = 6, height = 4, dpi = 300)
 
 annual_rainfall <- ggplot() +
   geom_sf(data = sampled_site_cmr, fill = "white", color = "black") +
@@ -1449,7 +1474,7 @@ annual_rainfall <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/annual_rainfall_viz_cmr.pdf", plot = annual_rainfall, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cmr_output/annual_rainfall_viz_cmr.pdf", plot = annual_rainfall, width = 6, height = 4, dpi = 300)
 
 annual_temperature <- ggplot() +
   geom_sf(data = sampled_site_cmr, fill = "white", color = "black") +
@@ -1461,7 +1486,7 @@ annual_temperature <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/annual_temperature_viz_cmr.pdf", plot = annual_temperature, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cmr_output/annual_temperature_viz_cmr.pdf", plot = annual_temperature, width = 6, height = 4, dpi = 300)
 
 
 Vegetation_index <- ggplot() +
@@ -1474,7 +1499,7 @@ Vegetation_index <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/Vegetation_index_viz_cmr.pdf", plot = Vegetation_index, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cmr_output/Vegetation_index_viz_cmr.pdf", plot = Vegetation_index, width = 6, height = 4, dpi = 300)
 
 
 elevation_cmr <- ggplot() +
@@ -1487,7 +1512,7 @@ elevation_cmr <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/elevation_viz_cmr.pdf", plot = elevation_cmr, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/cmr_output/elevation_viz_cmr.pdf", plot = elevation_cmr, width = 6, height = 4, dpi = 300)
 
 
 ```
@@ -1585,7 +1610,7 @@ var1 <- ggcorrplot(
     axis.text.x = element_text(angle = 45, hjust = 1)
   )
 
-ggsave("correlation_matrix.png", var1, dpi = 300, width = 6, height = 4)
+ggsave("Outputs/correlation_matrix.png", var1, dpi = 300, width = 6, height = 4)
 
 num_vars_selected <- sampled_data_join_sf %>% 
   st_drop_geometry() %>% 
@@ -1764,7 +1789,7 @@ boundary_C <- as.matrix(outer_ring_C)[, 1:2, drop = FALSE]
 mesh_A <- inla.mesh.2d(
   loc      = coords_A,
   boundary = list(boundary_A),
-  max.edge = c(3000, 50000),   # inner ~3 km, outer ~80 km
+  max.edge = c(3000, 80000),   # inner ~3 km, outer ~80 km
   cutoff   = 25000,
   offset   = c(0, 100000)
 )
@@ -1772,7 +1797,7 @@ mesh_A <- inla.mesh.2d(
 mesh_B <- inla.mesh.2d(
   loc = coords_B,
   boundary   = list(boundary_B) ,
-  max.edge = c(3000, 50000),   # inner ~3 km, outer ~80 km
+  max.edge = c(3000, 80000),   # inner ~3 km, outer ~80 km
   cutoff   = 25000,
   offset   = c(0, 100000)
 )
@@ -1780,7 +1805,7 @@ mesh_B <- inla.mesh.2d(
 mesh_C <- inla.mesh.2d(
   loc = coords_C,
   boundary   = list(boundary_C) ,
-  max.edge = c(3000, 50000),   # inner ~3 km, outer ~80 km
+  max.edge = c(3000, 80000),   # inner ~3 km, outer ~80 km
   cutoff   = 25000,
   offset   = c(0, 100000)
 )
@@ -2688,10 +2713,10 @@ grid_land_cover_wetland_df <- terra::extract(grid_land_cover_wetland, grid_sf)
 bbox <- st_bbox(countries_sf)
 
 
-rivers <- st_read("HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
+rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
                   wkt_filter = st_as_text(st_as_sfc(bbox)))
 
-lakes  <- st_read("HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+lakes  <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
                   wkt_filter = st_as_text(st_as_sfc(bbox)))
 
 rivers_valid <- st_make_valid(rivers)
@@ -2701,29 +2726,8 @@ rivers_valid <- ms_simplify(rivers_valid, keep = 0.3, keep_shapes = TRUE)
 lakes_valid  <- ms_simplify(lakes_valid,  keep = 0.3, keep_shapes = TRUE)
 
 
-
 rivers_valid <- st_transform(rivers_valid, st_crs(grid_sf))
 lakes_valid  <- st_transform(lakes_valid,  st_crs(grid_sf))
-
-
-
-# rivers <- st_transform(rivers, st_crs(grid_sf))
-# lakes  <- st_transform(lakes,  st_crs(grid_sf))
-# 
-# 
-# rivers_valid <- st_make_valid(rivers)
-# lakes_valid  <- st_make_valid(lakes)
-# 
-# countries_sf_country <- countries_sf %>% 
-#   group_by(country, country_id) %>% 
-#   summarise(geometry = st_union(geometry))
-# 
-# rivers_small <- st_crop(rivers_valid, countries_sf_country)
-# rivers_grid <- st_intersection(rivers_small, countries_sf_country)
-# 
-# lakes_small <- st_crop(lakes_valid, countries_sf_country)
-# lakes_grid   <- st_intersection(lakes_small, countries_sf_country)
-
 
 # nearest river segment for each point
 nn_riv <- st_nn(grid_sf, rivers_valid, k = 1, returnDist = TRUE)
@@ -2764,12 +2768,12 @@ for (i in missing_idx) {
   grid_sf$pop_density_2020[i] <- get_first_non_na(grid_sf$pop_density_2020, nn[[i]])
 }
 
-st_write(grid_sf, "grid_data_for_prediction_sf.gpkg", append = FALSE)
+st_write(grid_sf, "data/grid_data_for_prediction_sf.gpkg", append = FALSE)
 ```
 
 
 ```{r}
-grid_sf <- read_sf("grid_data_for_prediction_sf.gpkg")
+grid_sf <- read_sf("data/grid_data_for_prediction_sf.gpkg")
 
 
 # grid_sf$dist_to_water <- scale(grid_sf$dist_to_water)
@@ -2881,55 +2885,6 @@ grid_sf$prev_q025   <- apply(pred_mat, 1, quantile, 0.025)
 grid_sf$prev_q975   <- apply(pred_mat, 1, quantile, 0.975)
 
 
-# grid_sf$pred <- res_pred$summary.fitted.values[idx_pred, "mean"]
-# grid_sf$pred_sd <- res_pred$summary.fitted.values[idx_pred, "sd"]
-# 
-# grid_poly_ben <- st_make_grid(countries_sf_country %>% filter(country_id==1), cellsize = 5000, square = TRUE)
-# grid_poly_ben <- st_sf(geometry = grid_poly_ben)
-# 
-# grid_poly_cmr <- st_make_grid(countries_sf_country %>% filter(country_id==2), cellsize = 5000, square = TRUE)
-# grid_poly_cmr <- st_sf(geometry = grid_poly_cmr)
-# 
-# grid_poly_con <- st_make_grid(countries_sf_country %>% filter(country_id==3), cellsize = 5000, square = TRUE)
-# grid_poly_con <- st_sf(geometry = grid_poly_con)
-
-
-#grid_poly <- st_intersection(grid_poly, country)
-
-#grid_poly <- st_join(grid_poly, grid)
-
-# fix the NAs in our data by aligning polygons
-#nn <- st_nn(grid_poly, grid, k = 1, returnDist = FALSE)
-#grid_poly$pred_mean <- grid$pred_mean[ unlist(nn) ]
-
-# benin_sf <- shp_ben %>% st_union() %>% st_sf()
-# grid_benin <- grid_sf %>% filter(country_id == 1)
-# 
-# benin_sf <- st_transform(benin_sf, st_crs(grid_benin))
-# 
-# 
-# grid_benin_poly <- st_make_grid(
-#   benin_sf,
-#   cellsize = 5000,
-#   square = TRUE
-# )
-# 
-# grid_benin_poly <- st_sf(geometry = grid_benin_poly)
-# 
-# grid_benin_poly <- st_intersection(grid_benin_poly, benin_sf)
-# 
-# #st_crs(grid_benin_poly) <- st_crs(grid_benin)
-# 
-# grid_benin_poly$pred <- grid_benin$pred[
-#   st_nearest_feature(grid_benin_poly, grid_benin)
-# ]
-# 
-# #grid_poly_ben$pred <- grid_sf$pred[st_nearest_feature(grid_poly_ben, grid_sf)]
-# 
-# ggplot(grid_benin_poly) +
-#   geom_sf(aes(fill = pred), color = NA) +
-#   scale_fill_viridis_c() +
-#   theme_minimal()
 
 grid_sf$GID_0 <- ifelse(grid_sf$country_id == 1, "BEN",
                  ifelse(grid_sf$country_id == 2, "CMR",
@@ -2963,7 +2918,7 @@ ben_prev_1 <- ggplot(ben_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/Pm_pr_estimated/benin_estimated_prev_pm.pdf",
+ggsave("Outputs/ben_output/Pm_pr_estimated/benin_estimated_prev_pm.pdf",
        plot = ben_prev_1, width = 6, height = 4, dpi = 300)
 
 
@@ -2976,7 +2931,7 @@ ben_prev_uncertainty_1 <- ggplot(ben_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/Pm_pr_estimated/benin_estimated_prev_uncertainty_pm.pdf",
+ggsave("Outputs/ben_output/Pm_pr_estimated/benin_estimated_prev_uncertainty_pm.pdf",
        plot = ben_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3007,7 +2962,7 @@ cmr_prev_1 <- ggplot(cmr_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/Pm_pr_estimated/cmr_estimated_prev_pm.pdf", 
+ggsave("Outputs/cmr_output/Pm_pr_estimated/cmr_estimated_prev_pm.pdf", 
        plot = cmr_prev_1, width = 6, height = 4, dpi = 300)
 
 cmr_prev_uncertainty_1 <- ggplot(cmr_data_pev_map) +
@@ -3019,7 +2974,7 @@ cmr_prev_uncertainty_1 <- ggplot(cmr_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/Pm_pr_estimated/cmr_estimated_prev_pm_uncertainty.pdf", 
+ggsave("Outputs/cmr_output/Pm_pr_estimated/cmr_estimated_prev_pm_uncertainty.pdf", 
        plot = cmr_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3050,7 +3005,7 @@ con_prev_1 <- ggplot(con_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/Pm_pr_estimated/cong_estimated_prev_pm.pdf", 
+ggsave("Outputs/cong_output/Pm_pr_estimated/cong_estimated_prev_pm.pdf", 
        plot = con_prev_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3063,7 +3018,7 @@ con_prev_uncertainty_1 <- ggplot(con_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/Pm_pr_estimated/con_estimated_prev_pm_uncertainty.pdf", 
+ggsave("Outputs/cong_output/Pm_pr_estimated/con_estimated_prev_pm_uncertainty.pdf", 
        plot = con_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3077,10 +3032,6 @@ Across the three‑country study area, Plasmodium malariae prevalence is strongl
 # unclustered model
 The updated model produces results that are broadly consistent with the previous analysis, identifying rainfall and wetland environments as strong positive drivers of Plasmodium malariae prevalence, and built‑up areas as a strong negative predictor. However, the new model shows slightly reduced effect sizes for rainfall and increased uncertainty for several covariates. Notably, the effect of distance to water, previously statistically positive, now has a credible interval that includes zero, indicating insufficient evidence for a clear association. Cropland, population density, forest cover, and land‑cover water continue to show wide credible intervals that cross zero, meaning their effects remain statistically uncertain. Overall, the main difference between the two models lies in the reduced certainty around distance to water and slightly adjusted effect sizes, while the key environmental drivers rainfall, wetlands, and urbanisation remain robust.
 
-
-```{r}
-
-```
 
 
 ```{r}
@@ -3117,7 +3068,7 @@ ggplot(grid_con_poly) +
 ```{r}
 # Load the modeled prevalence from MAP
 
-africa_pf_pr_2_10 <- rast("prevalence_2000/2025_GBD2024_Global_PfPR_2021.tif")
+africa_pf_pr_2_10 <- rast("data/prevalence_2000/2025_GBD2024_Global_PfPR_2021.tif")
 
 # Cameroon case
 
@@ -3152,7 +3103,7 @@ cmr_prev_pf_MAP_estimates <- ggplot(cmr_map_pr_pf_2_10) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/MAP_pr_modeled/cmr_pr_MAP_pf_2_10.png",
+ggsave("Outputs/cmr_output/MAP_pr_modeled/cmr_pr_MAP_pf_2_10.png",
        plot = cmr_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
 
 cmr_prev_pf_MAP_estimates_uncertainty <- ggplot(cmr_map_pr_pf_2_10) +
@@ -3164,7 +3115,7 @@ cmr_prev_pf_MAP_estimates_uncertainty <- ggplot(cmr_map_pr_pf_2_10) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cmr_data/MAP_pr_modeled/cmr_pr_uncertainty_MAP_pf_2_10.png",
+ggsave("Outputs/cmr_output/MAP_pr_modeled/cmr_pr_uncertainty_MAP_pf_2_10.png",
        plot = cmr_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
 
 
@@ -3201,7 +3152,7 @@ ben_prev_pf_MAP_estimates <- ggplot(ben_map_pr_pf_2_10) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/MAP_pr_modeled/ben_pr_MAP_pf_2_10.png",
+ggsave("Outputs/ben_output/MAP_pr_modeled/ben_pr_MAP_pf_2_10.png",
        plot = ben_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
 
 ben_prev_pf_MAP_estimates_uncertainty <- ggplot(ben_map_pr_pf_2_10) +
@@ -3213,7 +3164,7 @@ ben_prev_pf_MAP_estimates_uncertainty <- ggplot(ben_map_pr_pf_2_10) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("ben_data/MAP_pr_modeled/ben_pr_uncertainty_MAP_pf_2_10.png",
+ggsave("Outputs/ben_output/MAP_pr_modeled/ben_pr_uncertainty_MAP_pf_2_10.png",
        plot = ben_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
 
 # Congo case
@@ -3249,7 +3200,7 @@ con_prev_pf_MAP_estimates <- ggplot(con_map_pr_pf_2_10) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/MAP_pr_modeled/con_pr_MAP_pf_2_10.png",
+ggsave("Outputs/cong_output/MAP_pr_modeled/con_pr_MAP_pf_2_10.png",
        plot = con_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
 
 con_prev_pf_MAP_estimates_uncertainty <- ggplot(con_map_pr_pf_2_10) +
@@ -3261,7 +3212,7 @@ con_prev_pf_MAP_estimates_uncertainty <- ggplot(con_map_pr_pf_2_10) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("cong_data/MAP_pr_modeled/con_pr_uncertainty_MAP_pf_2_10.png",
+ggsave("Outputs/cong_output/MAP_pr_modeled/con_pr_uncertainty_MAP_pf_2_10.png",
        plot = con_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
 
 
@@ -3326,7 +3277,7 @@ grid_congo_poly$pred <- grid_congo$pred[
 # prepare data for the continental level estimation
 
 ```{r}
-shp_global <- read_sf("Africa_data/shape_files_1/geoBoundariesCGAZ_ADM2.shp")
+shp_global <- read_sf("data/Africa_data/shape_files_1/geoBoundariesCGAZ_ADM2.shp")
 
 custom_match <- c(
   XKX = "Europe",
@@ -3384,7 +3335,7 @@ shp_africa_simple <- ms_simplify(
 
 st_write(
   shp_africa_simple,
-  "Africa_data/shp_africa/Africa_simplified.shp",
+  "data/Africa_data/shp_africa/Africa_simplified.shp",
   delete_layer = TRUE,
   append = TRUE
 )
@@ -3400,7 +3351,7 @@ To avoid extrapolating predictions into areas where malaria transmission is not 
 
 ```{r}
 
-shp_africa <- st_read("Africa_data/shp_africa/Africa_simplified.shp") %>% st_transform(3857)
+shp_africa <- st_read("data/Africa_data/shp_africa/Africa_simplified.shp") %>% st_transform(3857)
 
 # Dissolve all polygons into one
 shp_africa <- st_union(shp_africa)
@@ -3425,21 +3376,33 @@ ndvi_files <- list.files(
   full.names = TRUE
 )
 
-path1 <- "Africa_data/climateEngine_download.precipitation.tif"
-path2 <- "Africa_data/ERA5_LAND_DAILY_temperature_2m_2021-01-01_2021-12-31_-39p5213to41p4698N_-22p2966to54p0315E.temperature_2m.tif"
+path1 <- "data/Africa_data/climateEngine_download.precipitation.tif"
+path2 <- "data/Africa_data/ERA5_LAND_DAILY_temperature_2m_2021-01-01_2021-12-31_-39p5213to41p4698N_-22p2966to54p0315E.temperature_2m.tif"
 
 
-ITN_intervention_2021 <- rast("ITN_2000/2025_GBD2024_Africa_ITN_2021.tif")
+ITN_intervention_2021 <- rast("data/ITN_2000/2025_GBD2024_Africa_ITN_2021.tif")
 africa_rainfall_2021 <- rast(path1)
 africa_temperature_2021 <- rast(path2)
-africa_pop <- rast("Africa_data/pop_density/gpw_v4_population_density_rev11_2020_30_sec.tif")
-africa_elevation <- rast("Africa_data/elevation/wc2.1_30s_elev.tif")
-africa_land_cover_water <- rast("ben_data/landuse/WorldCover_water_30s.tif")
-africa_land_cover_built <- rast("ben_data/landuse/WorldCover_built_30s.tif")
-africa_land_cover_cropland <- rast("ben_data/landuse/WorldCover_cropland_30s.tif")
-africa_land_cover_trees <- rast("ben_data/landuse/WorldCover_trees_30s.tif")
-africa_land_cover_wetland <- rast("ben_data/landuse/WorldCover_wetland_30s.tif")
+africa_pop <- rast("data/Africa_data/pop_density/gpw_v4_population_density_rev11_2020_30_sec.tif")
+africa_elevation <- rast("data/Africa_data/elevation/wc2.1_30s_elev.tif")
 africa_ndvi_stack<- rast(ndvi_files)
+
+
+
+africa_land_cover_water <- crop(land_cover_water, ben_vect)
+africa_land_cover_water <- mask(cmr_land_cover_water, ben_vect)
+
+africa_land_cover_built <- crop(land_cover_builts, ben_vect)
+africa_land_cover_built <- mask(cmr_land_cover_built, ben_vect)
+
+africa_land_cover_cropland <- crop(land_cover_cropland, ben_vect)
+africa_land_cover_cropland <- mask(cmr_land_cover_cropland, ben_vect)
+
+africa_land_cover_trees <- crop(land_cover_trees, ben_vect)
+africa_land_cover_trees <- mask(cmr_land_cover_trees, ben_vect)
+
+africa_land_cover_wetland <- crop(land_cover_wetland, ben_vect)
+africa_land_cover_wetland <- mask(cmr_land_cover_wetland, ben_vect)
 
 
 africa_ITN_intervention_2021  <- project(ITN_intervention_2021,  st_crs(grid_sf_africa)$wkt)
@@ -3475,8 +3438,8 @@ shp_africa_summarise <- shp_africa %>%
 
 # bbox <- st_bbox(grid_sf_africa)
 
-rivers <- vect("HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp")
-lakes <- vect("HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp")
+rivers <- vect("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp")
+lakes <- vect("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp")
 
 
 africa4326 <- st_transform(shp_africa, 4326)
@@ -3511,7 +3474,7 @@ water <- cover(riv_r, lake_r)
 
 dist_water <- distance(
     water,
-    filename = "dist_to_water_5km.tif",
+    filename = "data/dist_to_water_5km.tif",
     overwrite = TRUE)
 
 grid_sf_africa$dist_to_water <- terra::extract(
@@ -3564,13 +3527,13 @@ for (var in vars_to_fill) {
 }
 
 
-st_write(grid_sf_africa, "Africa_data/grid_data_for_prediction_sf.gpkg", append = FALSE)
+st_write(grid_sf_africa, "data/Africa_data/grid_data_for_prediction_sf.gpkg", append = FALSE)
 
 ```
 
 
 ```{r}
-grid_sf_africa <- st_read("Africa_data/grid_data_for_prediction_sf.gpkg")
+grid_sf_africa <- st_read("data/Africa_data/grid_data_for_prediction_sf.gpkg")
 
 ```
 
@@ -4031,7 +3994,7 @@ df_grid_africa <- grid_sf_africa_wgs84 %>%
     ) %>%
     st_drop_geometry()
 
-global_spatial_limit <- rast("Africa_data/spatial_limit_of_transmission/2010_Pf_Limits_Decompressed.geotiff")
+global_spatial_limit <- rast("data/Africa_data/spatial_limit_of_transmission/2010_Pf_Limits_Decompressed.geotiff")
 
 # global_spatial_limit_3857 <- project(global_spatial_limit, crs(shp_africa))
 
@@ -4129,7 +4092,7 @@ Africa_prev_1 <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Africa_data/2021_africa_pr_malariae_map_admin2_level_instable.png",
+ggsave("Outputs/africa_output/2021_africa_pr_malariae_map_admin2_level_instable.png",
        plot = Africa_prev_1, width = 6, height = 4, dpi = 300)
 
 Africa_prev_country <- ggplot() +
@@ -4146,14 +4109,14 @@ Africa_prev_country <- ggplot() +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Africa_data/2021_africa_pr_malariae_map_country_level.png",
+ggsave("Outputs/africa_output/2021_africa_pr_malariae_map_country_level.png",
        plot = Africa_prev_country, width = 6, height = 4, dpi = 300)
 
 ```
 
 ```{r}
 
-global_spatial_limit <- rast("Africa_data/spatial_limit_of_transmission/2010_Pf_Limits_Decompressed.geotiff")
+global_spatial_limit <- rast("data/Africa_data/spatial_limit_of_transmission/2010_Pf_Limits_Decompressed.geotiff")
 
 # global_spatial_limit_3857 <- project(global_spatial_limit, crs(shp_africa))
 
@@ -4166,7 +4129,7 @@ df_limit_africa <- as.data.frame(pf_limit_africa, xy = TRUE, na.rm = TRUE)
 
 writeRaster(
     pf_limit_africa,
-    "Africa_data/spatial_limit_of_transmission/Pf_limit_Africa.tif",
+    "data/Africa_data/spatial_limit_of_transmission/Pf_limit_Africa.tif",
     overwrite = TRUE
 )
 
