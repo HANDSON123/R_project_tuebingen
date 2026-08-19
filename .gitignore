@@ -1,0 +1,11 @@
+.Rproj.user/ 
+.Rhistory 
+.RData 
+.Rproj.user 
+data/
+Africa_data/
+ben_data/
+cmr_data/
+cong_data/
+gab_data/
+gadm/
