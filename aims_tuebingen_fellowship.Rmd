@@ -3012,7 +3012,7 @@ ben_prev_1 <- ggplot(ben_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/ben_output/Pm_pr_estimated/benin_estimated_prev_pm.pdf",
+ggsave("Outputs/ben_output/Pf_pr_estimated/benin_estimated_prev_pf.pdf",
        plot = ben_prev_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3025,7 +3025,7 @@ ben_prev_uncertainty_1 <- ggplot(ben_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/ben_output/Pm_pr_estimated/benin_estimated_prev_uncertainty_pm.pdf",
+ggsave("Outputs/ben_output/Pf_pr_estimated/benin_estimated_prev_uncertainty_pf.pdf",
        plot = ben_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3056,7 +3056,7 @@ cmr_prev_1 <- ggplot(cmr_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cmr_output/Pm_pr_estimated/cmr_estimated_prev_pm.pdf", 
+ggsave("Outputs/cmr_output/Pf_pr_estimated/cmr_prev_estimated_pf.pdf", 
        plot = cmr_prev_1, width = 6, height = 4, dpi = 300)
 
 cmr_prev_uncertainty_1 <- ggplot(cmr_data_pev_map) +
@@ -3068,7 +3068,7 @@ cmr_prev_uncertainty_1 <- ggplot(cmr_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cmr_output/Pm_pr_estimated/cmr_estimated_prev_pm_uncertainty.pdf", 
+ggsave("Outputs/cmr_output/Pf_pr_estimated/cmr_estimated_prev_uncertainty_pf.pdf", 
        plot = cmr_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3099,7 +3099,7 @@ con_prev_1 <- ggplot(con_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cong_output/Pm_pr_estimated/cong_estimated_prev_pm.pdf", 
+ggsave("Outputs/cong_output/Pf_pr_estimated/cong_estimated_prev_pf.pdf", 
        plot = con_prev_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3112,7 +3112,7 @@ con_prev_uncertainty_1 <- ggplot(con_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cong_output/Pm_pr_estimated/con_estimated_prev_pm_uncertainty.pdf", 
+ggsave("Outputs/cong_output/Pf_pr_estimated/con_estimated_prev_uncertainty_pf.pdf", 
        plot = con_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
 
 
