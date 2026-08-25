@@ -1537,6 +1537,8 @@ numer_var_ben <- spatial_data_ben_sf %>%
   "elevation", "vegetaion_index", "pop_density_2020", "dist_to_water", "lc_water",
   "lc_trees", "lc_built", "lc_cropland", "lc_wetland"))
 
+
+
 Ben <- cor(numer_var_ben, use = "pairwise.complete.obs")
 corrplot(
   Ben,
@@ -1578,6 +1580,23 @@ num_vars <- sampled_data_join_sf %>%
   "annual_rainfall_2021", "annual_temperature_2021", "elevation", "vegetaion_index",
   "pop_density_2020", "dist_to_water", "lc_water", "lc_trees", "annual_ITN_usage_2021",
   "lc_built", "lc_cropland", "lc_wetland"))
+
+num_vars_1 <- sampled_data_join_sf %>% 
+  st_drop_geometry() %>% 
+  dplyr::select(c("dist_to_water", "PR_Pm_tot"))
+
+M1 <- cor(num_vars_1, use = "pairwise.complete.obs")
+
+corrplot(
+  M1,
+  method = "color",
+  type = "upper",
+  addCoef.col = "black",   
+  tl.col = "black",
+  tl.srt = 45,
+  number.cex = 0.7
+)
+
 
 M <- cor(num_vars, use = "pairwise.complete.obs")
 
@@ -1810,32 +1829,32 @@ mesh_C <- inla.mesh.2d(
   offset   = c(0, 100000)
 )
 
-# Extract triangle vertex indices
-tri <- mesh_C$graph$tv
-
-
-# Build edges from triangles
-edges_list <- list()
-
-for (i in 1:nrow(tri)) {
-  idx <- tri[i, ]
-  # Each triangle has 3 edges
-  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_C$loc[idx[c(1,2)], 1:2])
-  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_C$loc[idx[c(2,3)], 1:2])
-  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_C$loc[idx[c(3,1)], 1:2])
-}
-
-mesh_edges_sf <- st_as_sf(st_sfc(edges_list, crs = 3857))
-
-coords_df_C <- as.data.frame(coords_C)
-colnames(coords_df_C) <- c("X", "Y")
-
-ggplot() +
-  geom_sf(data = country_C_simplified, fill = "white", color = "black", size = 0.8) +
-  geom_sf(data = mesh_edges_sf, color = "grey60", size = 0.3) +
-  geom_point(data = coords_df_C, aes(X, Y), color = "red", size = 1.5) +
-  theme_minimal() +
-  ggtitle("Mesh A with Country Boundary")
+# # Extract triangle vertex indices
+# tri <- mesh_C$graph$tv
+# 
+# 
+# # Build edges from triangles
+# edges_list <- list()
+# 
+# for (i in 1:nrow(tri)) {
+#   idx <- tri[i, ]
+#   # Each triangle has 3 edges
+#   edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_C$loc[idx[c(1,2)], 1:2])
+#   edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_C$loc[idx[c(2,3)], 1:2])
+#   edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_C$loc[idx[c(3,1)], 1:2])
+# }
+# 
+# mesh_edges_sf <- st_as_sf(st_sfc(edges_list, crs = 3857))
+# 
+# coords_df_C <- as.data.frame(coords_C)
+# colnames(coords_df_C) <- c("X", "Y")
+# 
+# ggplot() +
+#   geom_sf(data = country_C_simplified, fill = "white", color = "black", size = 0.8) +
+#   geom_sf(data = mesh_edges_sf, color = "grey60", size = 0.3) +
+#   geom_point(data = coords_df_C, aes(X, Y), color = "red", size = 1.5) +
+#   theme_minimal() +
+#   ggtitle("Mesh A with Country Boundary")
 
 ```
 
@@ -1989,7 +2008,7 @@ A_country <- Diagonal(nrow(sf_data))
 
 stack_test_rainfall <- inla.stack(
   data = list(
-    y       = sf_data$Number_of_infected_tot_pm,
+    y       = sf_data$Number_of_infected_tot_pf,
     Ntrials = sf_data$Number_of_participant_tot
   ),
   A = list(
@@ -2011,7 +2030,7 @@ stack_test_rainfall <- inla.stack(
 
 stack_test_temperature <- inla.stack(
   data = list(
-    y       = sf_data$Number_of_infected_tot_pm,
+    y       = sf_data$Number_of_infected_tot_pf,
     Ntrials = sf_data$Number_of_participant_tot
   ),
   A = list(
@@ -2034,7 +2053,7 @@ stack_test_temperature <- inla.stack(
 
 stack_test_vegetation_index <- inla.stack(
   data = list(
-    y       = sf_data$Number_of_infected_tot_pm,
+    y       = sf_data$Number_of_infected_tot_pf,
     Ntrials = sf_data$Number_of_participant_tot
   ),
   A = list(
@@ -2056,7 +2075,7 @@ stack_test_vegetation_index <- inla.stack(
 
 stack_test_elevation <- inla.stack(
   data = list(
-    y       = sf_data$Number_of_infected_tot_pm,
+    y       = sf_data$Number_of_infected_tot_pf,
     Ntrials = sf_data$Number_of_participant_tot
   ),
   A = list(
@@ -2079,7 +2098,7 @@ stack_test_elevation <- inla.stack(
 
 stack_test_baseline <- inla.stack(
   data = list(
-    y       = sf_data$Number_of_infected_tot_pm,
+    y       = sf_data$Number_of_infected_tot_pf,
     Ntrials = sf_data$Number_of_participant_tot
   ),
   A = list(
@@ -2254,6 +2273,17 @@ res_baseline <- inla(
   ),
   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
 )
+
+# ## diasgnostic on the distance to water
+# 
+# res_simple <- inla(
+#   Number_of_infected_tot_pm ~ dist_to_water,
+#   family = "binomial",
+#   data = sf_data,
+#   Ntrials = sf_data$Number_of_participant_tot
+# )
+# 
+# res_simple$summary.fixed
 
 
 ```
@@ -2609,12 +2639,76 @@ idx_est <- inla.stack.index(stack_test_rainfall, "est")$data
 
 fitted_est <- res_rainfall$summary.fitted.values[idx_est, "mean"]
 
-cbind(
-  observed = sf_data$PR_Pm_tot,
-  fitted   = fitted_est
-)[1:25, ]
+fitted_est_25 <- res_rainfall$summary.fitted.values[idx_est, "0.025quant"]
+fitted_est_75 <- res_rainfall$summary.fitted.values[idx_est, "0.975quant"]
+
+
+fitted_data <- cbind(
+  id        = idx_est, 
+  observed  = sf_data$PR_Pf_tot,
+  fitted    = fitted_est,
+  fitted_25 = fitted_est_25,
+  fitted_75 = fitted_est_75
+)
+
+fitted_data <- as.data.frame(fitted_data)
 ```
 
+# Model examination
+```{r}
+# observed vs fitted
+
+ggplot(fitted_data, aes(x = observed, y = fitted)) +
+  geom_point(color = "blue", size = 2) +
+  geom_abline(intercept = 0, slope = 1, color = "red", lwd = 1.2) +
+  labs(x = "Observed proportion",
+       y = "Fitted prevalence",
+       title = "Observed vs Fitted (INLA)") +
+  theme_minimal()
+
+# residual
+
+fitted_data$residuals <- fitted_data$observed - fitted_data$fitted
+
+ggplot(fitted_data, aes(x = 1:nrow(fitted_data), y = residuals)) +
+  geom_point(color = "darkgreen", size = 2) +
+  geom_hline(yintercept = 0, color = "red", lwd = 1.2) +
+  labs(x = "Location index",
+       y = "Residual (observed - fitted)",
+       title = "Residuals of INLA fitted values") +
+  theme_minimal()
+
+# SPDE hyper parameters
+
+res_rainfall$summary.hyperpar
+
+
+```
+
+## Pf model examination
+- The observed vs fitted values plot shows that the smooth, shrunk estimates of the 
+true prevalence, which are generally consistent with the observed but less extreme.
+the number of points above and below the red line are roughly the same which means
+the model is not over estimating nor under estimating.
+
+- The residual plot shows a rough horizontal cloud indicating that the model is 
+stable and most residuals are between -0.1 and 0.1 meaning that the model fit well.
+we also have some moderate residuals around 0.3 and -0.3 meaning the model smooth 
+appropriately. Finally, the number of point above and below the horizontal line 
+are almost the same, which means the model is unbiased. 
+
+- The country_id precision is approximately 891 which means the spatial variability 
+between countries is very low in other words, the model does not find meaningful 
+differences between countries once covariates + spatial fields are included.
+
+- For all the three field, the range is ~9km with a very wide credible interval,
+meaning areas withing 9km are spatially correlated or influence each other but the 
+model is unsure to which extend because the uncertainty is high. This means that
+the prediction will be smooth but not overly flat.
+
+- All the three spatial field also have a very small standard deviation -0.025, 
+which means spatial variation exist but covariates explain most of the variation
+and spatial fiel refine the prediction instead of dominating it.
 
 # Creating the grid for prevalence estimation
 
