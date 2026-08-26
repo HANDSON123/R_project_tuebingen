@@ -2008,7 +2008,7 @@ A_country <- Diagonal(nrow(sf_data))
 
 stack_test_rainfall <- inla.stack(
   data = list(
-    y       = sf_data$Number_of_infected_tot_pf,
+    y       = sf_data$Number_of_infected_tot_pm,
     Ntrials = sf_data$Number_of_participant_tot
   ),
   A = list(
@@ -2030,7 +2030,7 @@ stack_test_rainfall <- inla.stack(
 
 stack_test_temperature <- inla.stack(
   data = list(
-    y       = sf_data$Number_of_infected_tot_pf,
+    y       = sf_data$Number_of_infected_tot_pm,
     Ntrials = sf_data$Number_of_participant_tot
   ),
   A = list(
@@ -2053,7 +2053,7 @@ stack_test_temperature <- inla.stack(
 
 stack_test_vegetation_index <- inla.stack(
   data = list(
-    y       = sf_data$Number_of_infected_tot_pf,
+    y       = sf_data$Number_of_infected_tot_pm,
     Ntrials = sf_data$Number_of_participant_tot
   ),
   A = list(
@@ -2075,7 +2075,7 @@ stack_test_vegetation_index <- inla.stack(
 
 stack_test_elevation <- inla.stack(
   data = list(
-    y       = sf_data$Number_of_infected_tot_pf,
+    y       = sf_data$Number_of_infected_tot_pm,
     Ntrials = sf_data$Number_of_participant_tot
   ),
   A = list(
@@ -2098,7 +2098,7 @@ stack_test_elevation <- inla.stack(
 
 stack_test_baseline <- inla.stack(
   data = list(
-    y       = sf_data$Number_of_infected_tot_pf,
+    y       = sf_data$Number_of_infected_tot_pm,
     Ntrials = sf_data$Number_of_participant_tot
   ),
   A = list(
@@ -2630,17 +2630,17 @@ ggplot(data.frame(pred = pred.est, resid = residuals),
   theme_minimal()
 
 ```
-# Conclusion on models comparison
+## Conclusion on models comparison (P. malaria model)
 
 The rainfall model is the right choice because it consistently shows the strongest performance across all diagnostics. It has the lowest DIC and WAIC, the best CPO, the tightest observed‑vs‑predicted fit, and it reduces the spatial field variance more than any other covariate, meaning rainfall explains a large part of the spatial structure instead of leaving it to the latent field. In short, rainfall improves prediction, reduces unexplained spatial variation, and aligns with malaria biology making it the most reliable and scientifically justified model to continue with.
 
 ```{r}
-idx_est <- inla.stack.index(stack_test_rainfall, "est")$data
+idx_est <- inla.stack.index(stack_test_temperature, "est")$data
 
-fitted_est <- res_rainfall$summary.fitted.values[idx_est, "mean"]
+fitted_est <- res_temperature$summary.fitted.values[idx_est, "mean"]
 
-fitted_est_25 <- res_rainfall$summary.fitted.values[idx_est, "0.025quant"]
-fitted_est_75 <- res_rainfall$summary.fitted.values[idx_est, "0.975quant"]
+fitted_est_25 <- res_temperature$summary.fitted.values[idx_est, "0.025quant"]
+fitted_est_75 <- res_temperature$summary.fitted.values[idx_est, "0.975quant"]
 
 
 fitted_data <- cbind(
@@ -2680,7 +2680,7 @@ ggplot(fitted_data, aes(x = 1:nrow(fitted_data), y = residuals)) +
 
 # SPDE hyper parameters
 
-res_rainfall$summary.hyperpar
+res_temperature$summary.hyperpar
 
 
 ```
@@ -2697,18 +2697,18 @@ we also have some moderate residuals around 0.3 and -0.3 meaning the model smoot
 appropriately. Finally, the number of point above and below the horizontal line 
 are almost the same, which means the model is unbiased. 
 
-- The country_id precision is approximately 891 which means the spatial variability 
-between countries is very low in other words, the model does not find meaningful 
-differences between countries once covariates + spatial fields are included.
+- The country_id precision is approximately ~15 which means there is some 
+meaningful difference between countries after accounting for covariates + spatial 
+fields.
 
-- For all the three field, the range is ~9km with a very wide credible interval,
-meaning areas withing 9km are spatially correlated or influence each other but the 
-model is unsure to which extend because the uncertainty is high. This means that
-the prediction will be smooth but not overly flat.
+- For all the three field, the range is ~7km to ~9km with a very wide credible interval,
+meaning areas withing these distance are spatially correlated or influence each 
+other but the model is unsure to which extend because the uncertainty is high. 
+This means that the prediction will be smooth but not overly flat.
 
-- All the three spatial field also have a very small standard deviation -0.025, 
-which means spatial variation exist but covariates explain most of the variation
-and spatial fiel refine the prediction instead of dominating it.
+- All the three spatial field also have a very small standard deviation 0.021 to
+0.027, which means spatial variation exist but covariates explain most of the 
+variation and spatial field refine the prediction instead of dominating it.
 
 # Creating the grid for prevalence estimation
 
@@ -2906,6 +2906,7 @@ A_pred_C_full[grid_sf$country_id == 3, ] <- as.matrix(A_pred_C)
 effects_fixed_pred <- data.frame(
   intercept               = 1,
   annual_rainfall_2021    = grid_sf$annual_rainfall_2021,
+  # annual_temperature_2021 = grid_sf$annual_temperature_2021,
   pop_density_2020        = grid_sf$pop_density_2020,
   # annual_ITN_usage_2021   = grid_sf$annual_ITN_usage_2021,
   dist_to_water           = grid_sf$dist_to_water,
@@ -3012,7 +3013,7 @@ ben_prev_1 <- ggplot(ben_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/ben_output/Pf_pr_estimated/benin_estimated_prev_pf.pdf",
+ggsave("Outputs/ben_output/Pm_pr_estimated/benin_estimated_prev_pm.png",
        plot = ben_prev_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3025,7 +3026,7 @@ ben_prev_uncertainty_1 <- ggplot(ben_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/ben_output/Pf_pr_estimated/benin_estimated_prev_uncertainty_pf.pdf",
+ggsave("Outputs/ben_output/Pm_pr_estimated/benin_estimated_prev_uncertainty_pm.png",
        plot = ben_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3056,7 +3057,7 @@ cmr_prev_1 <- ggplot(cmr_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cmr_output/Pf_pr_estimated/cmr_prev_estimated_pf.pdf", 
+ggsave("Outputs/cmr_output/Pm_pr_estimated/cmr_prev_estimated_pm.png", 
        plot = cmr_prev_1, width = 6, height = 4, dpi = 300)
 
 cmr_prev_uncertainty_1 <- ggplot(cmr_data_pev_map) +
@@ -3068,7 +3069,7 @@ cmr_prev_uncertainty_1 <- ggplot(cmr_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cmr_output/Pf_pr_estimated/cmr_estimated_prev_uncertainty_pf.pdf", 
+ggsave("Outputs/cmr_output/Pm_pr_estimated/cmr_estimated_prev_uncertainty_pm.png", 
        plot = cmr_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3099,7 +3100,7 @@ con_prev_1 <- ggplot(con_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cong_output/Pf_pr_estimated/cong_estimated_prev_pf.pdf", 
+ggsave("Outputs/cong_output/Pm_pr_estimated/cong_estimated_prev_pm.png", 
        plot = con_prev_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3112,7 +3113,7 @@ con_prev_uncertainty_1 <- ggplot(con_data_pev_map) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cong_output/Pf_pr_estimated/con_estimated_prev_uncertainty_pf.pdf", 
+ggsave("Outputs/cong_output/Pm_pr_estimated/con_estimated_prev_uncertainty_pm.png", 
        plot = con_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
 
 
@@ -3120,11 +3121,37 @@ ggsave("Outputs/cong_output/Pf_pr_estimated/con_estimated_prev_uncertainty_pf.pd
 # v2 <- res_pred$summary.fixed
 
 ```
-# clustered model
-Across the three‑country study area, Plasmodium malariae prevalence is strongly influenced by environmental conditions. Rainfall and wetland areas show clear positive associations with infection risk, indicating that humid and water‑rich ecosystems provide favourable breeding conditions for malaria vectors. Built‑up areas display a strong negative effect, reflecting reduced transmission in urbanised landscapes where mosquito habitats are disrupted. Distance to water shows a small but statistically meaningful positive effect. In contrast, cropland, population density, forest cover, and land‑cover water all have credible intervals that include zero, meaning the data do not provide sufficient evidence to classify their influence as either protective or risk‑enhancing. Overall, rainfall and wetlands emerge as key drivers of P. malariae transmission, with urbanisation acting as an important suppressor, while several other covariates show uncertain or negligible effects.
 
-# unclustered model
-The updated model produces results that are broadly consistent with the previous analysis, identifying rainfall and wetland environments as strong positive drivers of Plasmodium malariae prevalence, and built‑up areas as a strong negative predictor. However, the new model shows slightly reduced effect sizes for rainfall and increased uncertainty for several covariates. Notably, the effect of distance to water, previously statistically positive, now has a credible interval that includes zero, indicating insufficient evidence for a clear association. Cropland, population density, forest cover, and land‑cover water continue to show wide credible intervals that cross zero, meaning their effects remain statistically uncertain. Overall, the main difference between the two models lies in the reduced certainty around distance to water and slightly adjusted effect sizes, while the key environmental drivers rainfall, wetlands, and urbanisation remain robust.
+## P. malaria model interpretation
+
+### clustered model
+Across the three‑country study area, Plasmodium malariae prevalence is strongly
+influenced by environmental conditions. Rainfall and wetland areas show clear 
+positive associations with infection risk, indicating that humid and water‑rich
+ecosystems provide favorable breeding conditions for malaria vectors. Built‑up
+areas display a strong negative effect, reflecting reduced transmission in
+urbanized landscapes where mosquito habitats are disrupted. Distance to water
+shows a small but statistically meaningful positive effect. In contrast, 
+cropland, population density, forest cover, and land‑cover water all have 
+credible intervals that include zero, meaning the data do not provide sufficient
+evidence to classify their influence as either protective or risk‑enhancing. 
+Overall, rainfall and wetlands emerge as key drivers of P. malariae transmission,
+with urbanization acting as an important suppressor, while several other 
+covariates show uncertain or negligible effects.
+
+### unclustered model
+The updated model produces results that are broadly consistent with the previous
+analysis, identifying rainfall and wetland environments as strong positive 
+drivers of Plasmodium malariae prevalence, and built‑up areas as a strong 
+negative predictor. However, the new model shows slightly reduced effect sizes
+for rainfall and increased uncertainty for several covariates. Notably, the effect
+of distance to water, previously statistically positive, now has a credible interval
+that includes zero, indicating insufficient evidence for a clear association. 
+Cropland, population density, forest cover, and land‑cover water continue to show
+wide credible intervals that cross zero, meaning their effects remain statistically
+uncertain. Overall, the main difference between the two models lies in the reduced 
+certainty around distance to water and slightly adjusted effect sizes, while the 
+key environmental drivers rainfall, wetlands, and urbanisation remain robust.
 
 
 
@@ -3159,6 +3186,8 @@ ggplot(grid_con_poly) +
   theme_minimal()
 ```
 
+
+# P. falciparum prevalence from Malaria Atlas Project (MAP)
 ```{r}
 # Load the modeled prevalence from MAP
 
@@ -3188,28 +3217,62 @@ cmr_map_pr_pf_2_10 <- shp_cmr %>%
          pr_pf_2_10_U = cmr_admin2_pr[,5],
          CI_width = pr_pf_2_10_U - pr_pf_2_10_L)
 
+# Using the age standardize function to convert the prevalence from the 0-10
+# age group to all age.
+
+cmr_map_pr_pf_2_10$PR_all_age <- mapply(
+  convertPrevalence,
+  prev         = cmr_map_pr_pf_2_10$pr_pf_2_10,
+  age_min_in   = rep(2, nrow(cmr_map_pr_pf_2_10)),
+  age_max_in   = rep(10, nrow(cmr_map_pr_pf_2_10)),
+  age_min_out  = rep(0, nrow(cmr_map_pr_pf_2_10)),
+  age_max_out  = rep(99, nrow(cmr_map_pr_pf_2_10)),
+  parameters   = "Pf_Smith2007")
+
+cmr_map_pr_pf_2_10$PR_all_age_U <- mapply(
+  convertPrevalence,
+  prev         = cmr_map_pr_pf_2_10$pr_pf_2_10_U,
+  age_min_in   = rep(2, nrow(cmr_map_pr_pf_2_10)),
+  age_max_in   = rep(10, nrow(cmr_map_pr_pf_2_10)),
+  age_min_out  = rep(0, nrow(cmr_map_pr_pf_2_10)),
+  age_max_out  = rep(99, nrow(cmr_map_pr_pf_2_10)),
+  parameters   = "Pf_Smith2007")
+
+cmr_map_pr_pf_2_10$PR_all_age_L <- mapply(
+  convertPrevalence,
+  prev         = cmr_map_pr_pf_2_10$pr_pf_2_10_L,
+  age_min_in   = rep(2, nrow(cmr_map_pr_pf_2_10)),
+  age_max_in   = rep(10, nrow(cmr_map_pr_pf_2_10)),
+  age_min_out  = rep(0, nrow(cmr_map_pr_pf_2_10)),
+  age_max_out  = rep(99, nrow(cmr_map_pr_pf_2_10)),
+  parameters   = "Pf_Smith2007")
+
+cmr_map_pr_pf_2_10 <- cmr_map_pr_pf_2_10 %>% 
+  mutate(CI_width_all_age = PR_all_age_U - PR_all_age_L)
+
+
 cmr_prev_pf_MAP_estimates <- ggplot(cmr_map_pr_pf_2_10) +
-  geom_sf(aes(fill = pr_pf_2_10), color = NA) +
+  geom_sf(aes(fill = PR_all_age), color = NA) +
   scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence of Pf (2-10)")+
+  labs(title = "Prevalence of Pf")+
   theme_bw(base_size = 15)+
   theme(axis.text.x = element_text)+
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cmr_output/MAP_pr_modeled/cmr_pr_MAP_pf_2_10.png",
+ggsave("Outputs/cmr_output/MAP_pr_modeled/cmr_pr_MAP_pf_all_age.pdf",
        plot = cmr_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
 
 cmr_prev_pf_MAP_estimates_uncertainty <- ggplot(cmr_map_pr_pf_2_10) +
-  geom_sf(aes(fill = CI_width), color = NA) +
+  geom_sf(aes(fill = CI_width_all_age), color = NA) +
   scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence estimates uncertainty of P.f (2-10)")+
+  labs(title = "Prevalence estimates uncertainty of P.f")+
   theme_bw(base_size = 15)+
   theme(axis.text.x = element_text)+
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cmr_output/MAP_pr_modeled/cmr_pr_uncertainty_MAP_pf_2_10.png",
+ggsave("Outputs/cmr_output/MAP_pr_modeled/cmr_pr_uncertainty_MAP_pf_all_age.pdf",
        plot = cmr_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
 
 
@@ -3237,28 +3300,60 @@ ben_map_pr_pf_2_10 <- shp_ben %>%
          pr_pf_2_10_U = ben_admin2_pr[,5],
          CI_width = pr_pf_2_10_U - pr_pf_2_10_L)
 
+
+ben_map_pr_pf_2_10$PR_all_age <- mapply(
+  convertPrevalence,
+  prev         = ben_map_pr_pf_2_10$pr_pf_2_10,
+  age_min_in   = rep(2, nrow(ben_map_pr_pf_2_10)),
+  age_max_in   = rep(10, nrow(ben_map_pr_pf_2_10)),
+  age_min_out  = rep(0, nrow(ben_map_pr_pf_2_10)),
+  age_max_out  = rep(99, nrow(ben_map_pr_pf_2_10)),
+  parameters   = "Pf_Smith2007")
+
+ben_map_pr_pf_2_10$PR_all_age_U <- mapply(
+  convertPrevalence,
+  prev         = ben_map_pr_pf_2_10$pr_pf_2_10_U,
+  age_min_in   = rep(2, nrow(ben_map_pr_pf_2_10)),
+  age_max_in   = rep(10, nrow(ben_map_pr_pf_2_10)),
+  age_min_out  = rep(0, nrow(ben_map_pr_pf_2_10)),
+  age_max_out  = rep(99, nrow(ben_map_pr_pf_2_10)),
+  parameters   = "Pf_Smith2007")
+
+ben_map_pr_pf_2_10$PR_all_age_L <- mapply(
+  convertPrevalence,
+  prev         = ben_map_pr_pf_2_10$pr_pf_2_10_L,
+  age_min_in   = rep(2, nrow(ben_map_pr_pf_2_10)),
+  age_max_in   = rep(10, nrow(ben_map_pr_pf_2_10)),
+  age_min_out  = rep(0, nrow(ben_map_pr_pf_2_10)),
+  age_max_out  = rep(99, nrow(ben_map_pr_pf_2_10)),
+  parameters   = "Pf_Smith2007")
+
+ben_map_pr_pf_2_10 <- ben_map_pr_pf_2_10 %>% 
+  mutate(CI_width_all_age = PR_all_age_U - PR_all_age_L)
+
+
 ben_prev_pf_MAP_estimates <- ggplot(ben_map_pr_pf_2_10) +
-  geom_sf(aes(fill = pr_pf_2_10), color = NA) +
+  geom_sf(aes(fill = PR_all_age), color = NA) +
   scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence of Pf (2-10)")+
+  labs(title = "Prevalence of Pf")+
   theme_bw(base_size = 15)+
   theme(axis.text.x = element_text)+
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/ben_output/MAP_pr_modeled/ben_pr_MAP_pf_2_10.png",
+ggsave("Outputs/ben_output/MAP_pr_modeled/ben_pr_MAP_pf_all_age.pdf",
        plot = ben_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
 
 ben_prev_pf_MAP_estimates_uncertainty <- ggplot(ben_map_pr_pf_2_10) +
-  geom_sf(aes(fill = CI_width), color = NA) +
+  geom_sf(aes(fill = CI_width_all_age), color = NA) +
   scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence estimates uncertainty of P.f (2-10)")+
+  labs(title = "Prevalence estimates uncertainty of P.f")+
   theme_bw(base_size = 15)+
   theme(axis.text.x = element_text)+
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/ben_output/MAP_pr_modeled/ben_pr_uncertainty_MAP_pf_2_10.png",
+ggsave("Outputs/ben_output/MAP_pr_modeled/ben_pr_uncertainty_MAP_pf_all_age.pdf",
        plot = ben_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
 
 # Congo case
@@ -3285,30 +3380,59 @@ con_map_pr_pf_2_10 <- shp_con %>%
          pr_pf_2_10_U = cong_admin2_pr[,5],
          CI_width = pr_pf_2_10_U - pr_pf_2_10_L)
 
+con_map_pr_pf_2_10$PR_all_age <- mapply(
+  convertPrevalence,
+  prev         = con_map_pr_pf_2_10$pr_pf_2_10,
+  age_min_in   = rep(2, nrow(con_map_pr_pf_2_10)),
+  age_max_in   = rep(10, nrow(con_map_pr_pf_2_10)),
+  age_min_out  = rep(0, nrow(con_map_pr_pf_2_10)),
+  age_max_out  = rep(99, nrow(con_map_pr_pf_2_10)),
+  parameters   = "Pf_Smith2007")
+
+con_map_pr_pf_2_10$PR_all_age_U <- mapply(
+  convertPrevalence,
+  prev         = con_map_pr_pf_2_10$pr_pf_2_10_U,
+  age_min_in   = rep(2, nrow(con_map_pr_pf_2_10)),
+  age_max_in   = rep(10, nrow(con_map_pr_pf_2_10)),
+  age_min_out  = rep(0, nrow(con_map_pr_pf_2_10)),
+  age_max_out  = rep(99, nrow(con_map_pr_pf_2_10)),
+  parameters   = "Pf_Smith2007")
+
+con_map_pr_pf_2_10$PR_all_age_L <- mapply(
+  convertPrevalence,
+  prev         = con_map_pr_pf_2_10$pr_pf_2_10_L,
+  age_min_in   = rep(2, nrow(con_map_pr_pf_2_10)),
+  age_max_in   = rep(10, nrow(con_map_pr_pf_2_10)),
+  age_min_out  = rep(0, nrow(con_map_pr_pf_2_10)),
+  age_max_out  = rep(99, nrow(con_map_pr_pf_2_10)),
+  parameters   = "Pf_Smith2007")
+
+con_map_pr_pf_2_10 <- con_map_pr_pf_2_10 %>% 
+  mutate(CI_width_all_age = PR_all_age_U - PR_all_age_L)
+
 con_prev_pf_MAP_estimates <- ggplot(con_map_pr_pf_2_10) +
-  geom_sf(aes(fill = pr_pf_2_10), color = NA) +
+  geom_sf(aes(fill = PR_all_age), color = NA) +
   scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence of Pf (2-10)")+
+  labs(title = "Prevalence of P.f")+
   theme_bw(base_size = 15)+
   theme(axis.text.x = element_text)+
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cong_output/MAP_pr_modeled/con_pr_MAP_pf_2_10.png",
+ggsave("Outputs/cong_output/MAP_pr_modeled/con_pr_MAP_pf_all_age.pdf",
        plot = con_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
 
 con_prev_pf_MAP_estimates_uncertainty <- ggplot(con_map_pr_pf_2_10) +
   geom_sf(aes(fill = CI_width), color = NA) +
   scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence estimates uncertainty of P.f (2-10)")+
+  labs(title = "Prevalence estimates uncertainty of P.f")+
   theme_bw(base_size = 15)+
   theme(axis.text.x = element_text)+
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/cong_output/MAP_pr_modeled/con_pr_uncertainty_MAP_pf_2_10.png",
+ggsave("Outputs/cong_output/MAP_pr_modeled/con_pr_uncertainty_MAP_pf_all_age.pdf",
        plot = con_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
-
 
 ```
 
