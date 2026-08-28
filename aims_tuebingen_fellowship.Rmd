@@ -4157,15 +4157,16 @@ stk_pred <- inla.stack(
   effects = list(
     spatial = 1:spde_Africa$n.spde,
     data.frame(
-      intercept        = 1,
-      rainfall         = grid_sf_africa$annual_rainfall_2021,
-      pop_density      = grid_sf_africa$pop_density_2020,
-      dist_to_water    = grid_sf_africa$dist_to_water,
-      lc_cropland      = grid_sf_africa$lc_cropland,
-      lc_water         = grid_sf_africa$lc_water,
-      lc_wetland       = grid_sf_africa$lc_wetland,
-      lc_built         = grid_sf_africa$lc_built,
-      lc_trees         = grid_sf_africa$lc_trees
+      intercept                    = 1,
+      # annual_rainfall_2021       = grid_sf_africa$annual_rainfall_2021,
+      annual_temperature_2021      = grid_sf_africa$annual_temperature_2021,  
+      pop_density_2020             = grid_sf_africa$pop_density_2020,
+      dist_to_water                = grid_sf_africa$dist_to_water,
+      lc_cropland                  = grid_sf_africa$lc_cropland,
+      lc_water                     = grid_sf_africa$lc_water,
+      lc_wetland                   = grid_sf_africa$lc_wetland,
+      lc_built                     = grid_sf_africa$lc_built,
+      lc_trees                     = grid_sf_africa$lc_trees
     )
   ),
   tag = "pred"
@@ -4173,12 +4174,12 @@ stk_pred <- inla.stack(
 
 
 # Combine estimation + prediction stacks
-stk_full <- inla.stack(stk_est_rainfall, stk_pred)
+stk_full <- inla.stack(stk_est_temperature, stk_pred)
 
 
 # Fit the model again with the full stack
 res_pred <- inla(
-  formula_rainfall,
+  formula_temperature,
   family = "binomial",
   Ntrials = Ntrials,
   data = inla.stack.data(stk_full),
@@ -4299,36 +4300,73 @@ shp_africaw4326 <- shp_africa %>% st_transform(4326)
 Africa_prev_1 <- ggplot() +
   geom_sf(data = grid_masked_sf,
           aes(color = pred_mean),
-          size = 0.8,
-          alpha = 0.8) +
+          size = 0.1,
+          alpha = 0.4) +
   geom_sf(data = shp_africaw4326,
           fill = NA,
           color = "black",
-          size = 0.1) +
+          size = 0.05) +
   scale_color_viridis_c(option = "magma", na.value = "white") +
   theme_bw(base_size = 15) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/africa_output/2021_africa_pr_malariae_map_admin2_level_instable.png",
+ggsave("Outputs/africa_output/2021_africa_pr_malariae_map_admin2_level_unstable.pdf",
        plot = Africa_prev_1, width = 6, height = 4, dpi = 300)
 
-Africa_prev_country <- ggplot() +
+Africa_prev_country_1 <- ggplot() +
   geom_sf(data = grid_masked_sf,
           aes(color = pred_mean),
-          size = 0.8,
-          alpha = 0.8) +
+          size = 0.1,
+          alpha = 0.4) +
   geom_sf(data = shp_africa_countryw4326,
           fill = NA,
           color = "black",
-          size = 0.1) +
+          size = 0.05) +
   scale_color_viridis_c(option = "magma", na.value = "white") +
   theme_bw(base_size = 15) +
   theme(axis.text.x = element_blank(),
         axis.text.y = element_blank())
 
-ggsave("Outputs/africa_output/2021_africa_pr_malariae_map_country_level.png",
-       plot = Africa_prev_country, width = 6, height = 4, dpi = 300)
+ggsave("Outputs/africa_output/2021_africa_pr_malariae_map_country_level_unstable.pdf",
+       plot = Africa_prev_country_1, width = 6, height = 4, dpi = 300)
+
+
+# setting unstable areas to 0
+
+Africa_prev_2 <- ggplot() +
+  geom_sf(data = grid_masked_sf_1,
+          aes(color = pred_mean),
+          size = 0.1,
+          alpha = 0.4) +
+  geom_sf(data = shp_africaw4326,
+          fill = NA,
+          color = "black",
+          size = 0.05) +
+  scale_color_viridis_c(option = "magma", na.value = "white") +
+  theme_bw(base_size = 15) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank())
+
+ggsave("Outputs/africa_output/2021_africa_pr_malariae_map_admin2_level.pdf",
+       plot = Africa_prev_2, width = 6, height = 4, dpi = 300)
+
+Africa_prev_country_2 <- ggplot() +
+  geom_sf(data = grid_masked_sf_1,
+          aes(color = pred_mean),
+          size = 0.1,
+          alpha = 0.4) +
+  geom_sf(data = shp_africa_countryw4326,
+          fill = NA,
+          color = "black",
+          size = 0.05) +
+  scale_color_viridis_c(option = "magma", na.value = "white") +
+  theme_bw(base_size = 15) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank())
+
+ggsave("Outputs/africa_output/2021_africa_pr_malariae_map_country_level.pdf",
+       plot = Africa_prev_country_2, width = 6, height = 4, dpi = 300)
 
 ```
 
