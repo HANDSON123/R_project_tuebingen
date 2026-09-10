@@ -1,0 +1,431 @@
+---
+title: "Ct Values Analysis: COMAL data"
+author: "Ndim Handson NSANI"
+format: html
+editor: visual
+---
+
+```{r}
+#| label: loading necessary libraries
+
+library(readxl)
+library(ggplot2)
+library(tidyverse)
+library(tidyterra)
+library(terra)
+```
+
+```{r}
+#| label: loading the data
+
+BEN_df <- read_excel("data/COMAL data Benin&Congo.xlsx", sheet = 1)
+
+CON_df <- read_excel("data/COMAL data Benin&Congo.xlsx", sheet = 2)
+
+CMR_df <- read_excel("data/cmr_data/Cameroon2.xlsx")
+
+GAB_df <- read_excel("data/gab_data/Gabon2.xlsx")  
+```
+
+```{r}
+#| label: cleaning the data 
+
+BEN_Ct <- BEN_df %>% 
+  dplyr::select(Village, `Sample ID`, `Household ID`, Sex, `Age (year)`, Season, `Parasitaemia Pf (P/µl)`,
+                `Parasitaemia Pm (P/µl)`, `qRT-qPCR Pf positive`, `qRT-qPCR Pm positive`,
+                `Pf(Ct) mean`, `Pm(Ct) mean`) %>% 
+  rename(Sample_ID        = `Sample ID`,
+         Household_ID     = `Household ID`,
+         Age              = `Age (year)`,
+         Parasitaemia_Pf  = `Parasitaemia Pf (P/µl)`,
+         Parasitaemia_Pm  = `Parasitaemia Pm (P/µl)`,
+         Positive_pf      = `qRT-qPCR Pf positive`,
+         Positive_pm      = `qRT-qPCR Pm positive`,
+         Ct_value_pf      = `Pf(Ct) mean`,
+         Ct_value_pm      = `Pm(Ct) mean`) %>% 
+  mutate(Age_group        = cut(Age,
+                                breaks = c(0, 5, 10, Inf),
+                                labels = c("<5", "5<10", "10+"),
+                                right  = FALSE),
+         Parasitaemia_Pf  = case_when(is.na(Parasitaemia_Pf) ~ 0,
+                                     TRUE ~ as.numeric(Parasitaemia_Pf)),
+         Parasitaemia_Pm  = case_when(is.na(Parasitaemia_Pm)~0,
+                                     TRUE ~ as.numeric(Parasitaemia_Pm)),
+         Positive_pf      = case_when(is.na(Positive_pf) ~ "neg",
+                                     TRUE ~ "pos"),
+         Positive_pm      = case_when(is.na(Positive_pm) ~ "neg",
+                                     TRUE ~ "pos"),
+         Ct_value_pf      = case_when(is.na(Ct_value_pf) ~ 0,
+                                     TRUE ~ Ct_value_pf),
+         Ct_value_pm      = case_when(is.na(Ct_value_pm) ~ 0,
+                                     TRUE ~ Ct_value_pm),
+         Ct_level_pf      = case_when((Ct_value_pf>0 & Ct_value_pf<=20) ~ "Low",
+                                      (Ct_value_pf>20 & Ct_value_pf<=30) ~ "Moderate",
+                                      (Ct_value_pf>30) ~ "High",
+                                      TRUE ~ "None"),
+         Ct_level_pm      = case_when((Ct_value_pm>0 & Ct_value_pm<=20) ~ "Low",
+                                      (Ct_value_pm>20 & Ct_value_pm<=30) ~ "Moderate",
+                                      (Ct_value_pm>30) ~ "High",
+                                      TRUE ~ "None"))
+
+CONG_Ct <- CON_df %>% 
+  dplyr::select(`Sample ID`, Sex, `Age (year)`,`Parasitaemia Pf (P/µl)`, 
+                `Parasitaemia Pm (P/µl)`, `qRT-qPCR Pf positive`,
+                `qRT-qPCR Pm positive`, `Pf(Ct) mean`, `Pm(Ct) mean`)%>% 
+  rename(Sample_ID        = `Sample ID`,
+         Age              = `Age (year)`,
+         Parasitaemia_Pf  = `Parasitaemia Pf (P/µl)`,
+         Parasitaemia_Pm  = `Parasitaemia Pm (P/µl)`,
+         Positive_pf      = `qRT-qPCR Pf positive`,
+         Positive_pm      = `qRT-qPCR Pm positive`,
+         Ct_value_pf      = `Pf(Ct) mean`,
+         Ct_value_pm      = `Pm(Ct) mean`)%>% 
+  mutate(Age_group        = cut(Age,
+                                breaks = c(0, 5, 10, Inf),
+                                labels = c("<5", "5<10", "10+"),
+                                right  = FALSE),
+         Parasitaemia_Pf  = case_when(is.na(Parasitaemia_Pf) ~ 0,
+                                     TRUE ~ as.numeric(Parasitaemia_Pf)),
+         Parasitaemia_Pm  = case_when(is.na(Parasitaemia_Pm)~0,
+                                     TRUE ~ as.numeric(Parasitaemia_Pm)),
+         Positive_pf      = case_when(is.na(Positive_pf) ~ "neg",
+                                     TRUE ~ "pos"),
+         Positive_pm      = case_when(is.na(Positive_pm) ~ "neg",
+                                     TRUE ~ "pos"),
+         Ct_value_pf      = case_when(is.na(Ct_value_pf) ~ 0,
+                                     TRUE ~ Ct_value_pf),
+         Ct_value_pm      = case_when(is.na(Ct_value_pm) ~ 0,
+                                     TRUE ~ Ct_value_pm),
+         Ct_level_pf      = case_when((Ct_value_pf>0 & Ct_value_pf<=20) ~ "Low",
+                                      (Ct_value_pf>20 & Ct_value_pf<=30) ~ "Moderate",
+                                      (Ct_value_pf>30) ~ "High",
+                                      TRUE ~ "None"),
+         Ct_level_pm      = case_when((Ct_value_pm>0 & Ct_value_pm<=20) ~ "Low",
+                                      (Ct_value_pm>20 & Ct_value_pm<=30) ~ "Moderate",
+                                      (Ct_value_pm>30) ~ "High",
+                                      TRUE ~ "None"))
+
+CMR_Ct <- CMR_df %>% 
+  dplyr::select(district, ID, Season, age, parasitemia_pf, parasitemia_pm, pcr_pf,
+                pcr_pm, pf_ct, pm_ct) %>% 
+  rename(Village         = district,
+         Sample_ID       = ID,
+         Age             = age,
+         Parasitaemia_Pf = parasitemia_pf,
+         Parasitaemia_Pm = parasitemia_pm,
+         Positive_pf     = pcr_pf,
+         Positive_pm     = pcr_pm,
+         Ct_value_pf     = pf_ct,
+         Ct_value_pm     = pm_ct) %>% 
+  mutate(Age_group        = cut(Age,
+                                breaks = c(0, 5, 10, Inf),
+                                labels = c("<5", "5<10", "10+"),
+                                right  = FALSE),
+         Parasitaemia_Pf = case_when(is.na(Parasitaemia_Pf) ~ 0,
+                                     TRUE ~ as.numeric(Parasitaemia_Pf)),
+         Parasitaemia_Pm = case_when(is.na(Parasitaemia_Pm)~0,
+                                     TRUE ~ as.numeric(Parasitaemia_Pm)),
+         Ct_level_pf      = case_when((Ct_value_pf>0 & Ct_value_pf<=20) ~ "Low",
+                                      (Ct_value_pf>20 & Ct_value_pf<=30) ~ "Moderate",
+                                      (Ct_value_pf>30) ~ "High",
+                                      TRUE ~ "None"),
+         Ct_level_pm      = case_when((Ct_value_pm>0 & Ct_value_pm<=20) ~ "Low",
+                                      (Ct_value_pm>20 & Ct_value_pm<=30) ~ "Moderate",
+                                      (Ct_value_pm>30) ~ "High",
+                                      TRUE ~ "None"))
+
+GAB_Ct <- GAB_df %>% 
+  dplyr::select(district, ID, season, age, parasitemia_pf, parasitemia_pm, pcr_pf, 
+                pcr_pm, pf_ct, pm_ct) %>% 
+  rename(Village         = district,
+         Sample_ID       = ID,
+         Season          = season,
+         Age             = age,
+         Parasitaemia_Pf = parasitemia_pf,
+         Parasitaemia_Pm = parasitemia_pm,
+         Positive_pf     = pcr_pf,
+         Positive_pm     = pcr_pm,
+         Ct_value_pf     = pf_ct,
+         Ct_value_pm     = pm_ct)%>% 
+  mutate(Age_group        = cut(Age,
+                                breaks = c(0, 5, 10, Inf),
+                                labels = c("<5", "5<10", "10+"),
+                                right  = FALSE),
+         Parasitaemia_Pf = case_when(is.na(Parasitaemia_Pf) ~ 0,
+                                     TRUE ~ as.numeric(Parasitaemia_Pf)),
+         Parasitaemia_Pm  = case_when(is.na(Parasitaemia_Pm)~0,
+                                     TRUE ~ as.numeric(Parasitaemia_Pm)),
+         Ct_level_pf      = case_when((Ct_value_pf>0 & Ct_value_pf<=20) ~ "Low",
+                                      (Ct_value_pf>20 & Ct_value_pf<=30) ~ "Moderate",
+                                      (Ct_value_pf>30) ~ "High",
+                                      TRUE ~ "None"),
+         Ct_level_pm      = case_when((Ct_value_pm>0 & Ct_value_pm<=20) ~ "Low",
+                                      (Ct_value_pm>20 & Ct_value_pm<=30) ~ "Moderate",
+                                      (Ct_value_pm>30) ~ "High",
+                                      TRUE ~ "None"))
+ 
+```
+
+```{r}
+#| label: Demographic and risk factor analysis
+
+boxplot_Ct_Age_Ben <- ggplot(data = BEN_Ct %>% filter(Ct_value_pm != 0), aes(x= Age_group, y = Ct_value_pm,
+                                                       fill = Age_group))+
+  geom_boxplot(alpha = 0.6, outlier.fill = NA)+
+  geom_jitter(width = 0.2, alpha = 0.5, color = "darkslategrey")+
+  scale_y_reverse()+
+  scale_fill_brewer(palette = "Set2")+
+  labs(title = "Parasite burden (Ct value) by Age group in Benin",
+       x     = "Age group",
+       y     = "PCR Ct value")
+
+ggsave("Outputs/ben_output/Ct_Age_Ben.png", plot = boxplot_Ct_Age_Ben, width = 6, height = 4, dpi = 300)
+
+
+boxplot_Ct_Age_CONG <- ggplot(data = CONG_Ct %>% filter(Ct_value_pm != 0), aes(x= Age_group, y = Ct_value_pm,
+                                                       fill = Age_group))+
+  geom_boxplot(alpha = 0.6, outlier.fill = NA)+
+  geom_jitter(width = 0.2, alpha = 0.5, color = "darkslategrey")+
+  scale_y_reverse()+
+  scale_fill_brewer(palette = "Set2")+
+  labs(title = "Parasite burden (Ct value) by Age group in Congo",
+       x     = "Age group",
+       y     = "PCR Ct value")
+
+ggsave("Outputs/cong_output/Ct_Age_CONG.png", plot = boxplot_Ct_Age_CONG, width = 6, height = 4, dpi = 300)
+
+
+boxplot_Ct_Age_CMR <- ggplot(data = CMR_Ct %>% filter(Ct_value_pm != 0), aes(x= Age_group, y = Ct_value_pm,
+                                                       fill = Age_group))+
+  geom_boxplot(alpha = 0.6, outlier.fill = NA)+
+  geom_jitter(width = 0.2, alpha = 0.5, color = "darkslategrey")+
+  scale_y_reverse()+
+  scale_fill_brewer(palette = "Set2")+
+  labs(title = "Parasite burden (Ct value) by Age group in Cameroon",
+       x     = "Age group",
+       y     = "PCR Ct value")
+
+ggsave("Outputs/cmr_output/Ct_Age_CMR.png", plot = boxplot_Ct_Age_CMR, width = 6, height = 4, dpi = 300)
+
+
+boxplot_Ct_Age_GAB <- ggplot(data = GAB_Ct %>% filter(Ct_value_pm != 0), aes(x= Age_group, y = Ct_value_pm,
+                                                       fill = Age_group))+
+  geom_boxplot(alpha = 0.6, outlier.fill = NA)+
+  geom_jitter(width = 0.2, alpha = 0.5, color = "darkslategrey")+
+  scale_y_reverse()+
+  scale_fill_brewer(palette = "Set2")+
+  labs(title = "Parasite burden (Ct value) by Age group in Gabon",
+       x     = "Age group",
+       y     = "PCR Ct value")
+
+ggsave("Outputs/gab_output/Ct_Age_GAB.png", plot = boxplot_Ct_Age_GAB, width = 6, height = 4, dpi = 300)
+
+```
+
+-   In Benin the `5<10` age group is the one with the lowest Ct value meaning they are the one with high parasitemia in the country while `<5` is the one with highest value, then low parasitemia due to acquire natural immunity.
+
+-   In Congo `10+` is the age group with the lowest Ct value and the one with the highest value is `5<10`.
+
+-   In Cameroon `<5` and `5<10` are the ones with the lowest Ct value and the with the highest value is `10+`. For this case with two outliers for `5<10` age group with Ct value greater than `50`.
+
+-   For Gabon we still have `<5` and `5<10` age group which are the ones with the lowest Ct value whereas `10+` is the one with the highest Ct value.
+
+
+```{r}
+#| label: disease burden per age group
+  
+country_summary <- bind_rows(
+  BEN_Ct  %>% mutate(Country = "Benin"),
+  CONG_Ct %>% mutate(Country = "Congo"),
+  CMR_Ct  %>% mutate(Country = "Cameroon"),
+  GAB_Ct  %>% mutate(Country = "Gabon")
+) %>%
+  group_by(Country) %>%
+  summarise(
+    n_tested = n(),
+    n_positive_pm = sum(Positive_pm == "pos", na.rm = TRUE),
+    prevalence_pm = n_positive_pm / n_tested,
+    .groups = "drop"
+  )
+
+
+age_prev <- bind_rows(
+  BEN_Ct  %>% mutate(Country = "Benin"),
+  CONG_Ct %>% mutate(Country = "Congo"),
+  CMR_Ct  %>% mutate(Country = "Cameroon"),
+  GAB_Ct  %>% mutate(Country = "Gabon")
+) %>%
+  group_by(Country, Age_group) %>%
+  summarise(
+    n = n(),
+    positive = sum(Positive_pm == "pos", na.rm = TRUE),
+    prevalence = positive / n,
+    .groups = "drop"
+  )
+
+
+
+ggplot(age_prev,
+       aes(x = reorder(Age_group, prevalence), y = prevalence, fill = Country)) +
+  geom_col(position = "dodge")+
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    x = "Age group",
+    y = "P. malariae prevalence",
+    fill = "Country"
+  ) +
+  theme_minimal()
+
+
+ggplot(age_prev,
+       aes(x = reorder(Country, prevalence),
+           y = prevalence,
+           fill = Country)) +
+  geom_col() +
+  scale_y_continuous(labels = scales::percent) +
+  facet_wrap(~ Age_group, scales = "free_x") +
+  labs(
+    x = "Country",
+    y = "P. malariae prevalence"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+```{r}
+#| label: Ct values at country level 
+
+pm_positive <- bind_rows(
+  BEN_Ct  %>% mutate(Country = "Benin"),
+  CONG_Ct %>% mutate(Country = "Congo"),
+  CMR_Ct  %>% mutate(Country = "Cameroon"),
+  GAB_Ct  %>% mutate(Country = "Gabon")
+) %>%
+  filter(Positive_pm == "pos")
+
+ggplot(pm_positive,
+       aes(x = Country, y = Parasitaemia_Pm)) +
+  geom_boxplot() +
+  scale_y_log10() +
+  labs(
+    x = "Country",
+    y = "P. malariae parasitaemia"
+  ) +
+  theme_minimal()
+
+
+bbplot_countries <- ggplot(pm_positive,
+       aes(x = Country, y = Ct_value_pm, fill = Country)) +
+  geom_boxplot(alpha = 0.6, outlier.fill = NA) +
+  geom_jitter(width = 0.2, alpha = 0.5,  color = "darkslategrey")+
+  scale_y_reverse()+
+  scale_fill_brewer(palette = "Set2")+
+  labs(
+    x = "Country",
+    y = "P. malariae Ct value"
+  )
+
+ggsave("Outputs/Ct_Countries.png", plot = bbplot_countries, width = 6, height = 4, dpi = 300)
+
+
+box_plot_facet_by_country <- ggplot(pm_positive,
+       aes(x = Age_group, y = Ct_value_pm, fill = Age_group)) +
+  geom_boxplot(alpha = 0.6, outlier.fill = NA) +
+  geom_jitter(width = 0.2, alpha = 0.5,  color = "darkslategrey")+
+  scale_y_reverse()+
+  facet_wrap(~Country, nrow = 2)+
+  scale_fill_brewer(palette = "Set2")+
+  labs(
+    x = "Country",
+    y = "P. malariae Ct value"
+  )
+
+ggsave("Outputs/Box_Ct_Countries.png", plot = box_plot_facet_by_country,
+       width = 6, height = 4, dpi = 300)
+
+ggplot(pm_positive,
+       aes(x = Ct_value_pm, fill = Country)) +
+  geom_density(alpha = 0.4) +
+  theme_minimal()
+```
+
+
+- So at the country level, Cameroon has the highest Ct level and also the highest
+prevalence which means high prevalence might not necessary mean severity of the 
+disease but instead a hidden reservoir of the parasite transmission with low
+density of parasite load. But if we look closely to countries like Benin, 
+Gabon, Congo, we will see that Benin has the prevalence value but all those three
+countries have almost the same level of Ct values which mean with the data we
+have, we cannot draw an effective conclusion with the data we have.
+
+
+```{r}
+#| label: Age vs Ct values
+
+country_pm <- bind_rows(
+  BEN_Ct  %>% mutate(Country = "Benin"),
+  CONG_Ct %>% mutate(Country = "Congo"),
+  CMR_Ct  %>% mutate(Country = "Cameroon"),
+  GAB_Ct  %>% mutate(Country = "Gabon")
+)
+
+scarterplot_age_ct <- ggplot(data = country_pm %>% filter(!is.na(Age)), aes(x= Age, y= Ct_value_pm))+
+  geom_point(alpha = 0.6) +
+  facet_wrap(~Country, nrow = 2)+
+  theme_minimal()+
+  labs(title = "Relationship between Age and Ct values (P. m)", x = "Age", y = "Ct values")
+
+ggsave("Outputs/scarterplot_age_ct.png", plot = scarterplot_age_ct, width = 6, height = 4, dpi = 300)
+
+
+cor(country_pm$Age, country_pm$Ct_value_pm, method = "pearson", use = "complete.obs")
+
+
+country_pm %>%
+  group_by(Country) %>%
+  summarise(
+    prevalence = mean(Positive_pm == "pos", na.rm = TRUE),
+    mean_Ct = mean(Ct_value_pm[Positive_pm == "pos"], na.rm = TRUE),
+    median_Ct = median(Ct_value_pm[Positive_pm == "pos"], na.rm = TRUE)
+  )
+
+ggplot(pm_positive,
+       aes(x = Age, y = Ct_value_pm)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "loess", se = TRUE) +
+  facet_wrap(~ Country) +
+  theme_minimal()
+
+
+co_inf <- bind_rows(
+  BEN_Ct  %>% mutate(Country = "Benin"),
+  CONG_Ct %>% mutate(Country = "Congo"),
+  CMR_Ct  %>% mutate(Country = "Cameroon"),
+  GAB_Ct  %>% mutate(Country = "Gabon")
+) %>%
+  count(Country,Positive_pf, Positive_pm)
+```
+
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
