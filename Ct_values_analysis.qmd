@@ -1,7 +1,21 @@
 ---
 title: "Ct Values Analysis: COMAL data"
 author: "Ndim Handson NSANI"
-format: html
+format:
+  html:
+    toc: true
+    toc-location: right     # move TOC to sidebar
+    toc-depth: 3            # optional (controls levels)
+    #toc-expand: true        # optional (expand all)
+    smooth-scroll: true     # mooth scrolling + highlighting
+    code-fold: false
+    self-contained: false
+    #theme: cosmo
+    #embed-resources: true
+  pptx:
+    #reference-doc: Présentation2.pptx
+    prefer-html: true
+    slide-level: 2
 editor: visual
 ---
 
@@ -13,6 +27,9 @@ library(ggplot2)
 library(tidyverse)
 library(tidyterra)
 library(terra)
+library(RColorBrewer)
+library(lme4)
+library(lmerTest)
 ```
 
 ```{r}
@@ -24,7 +41,7 @@ CON_df <- read_excel("data/COMAL data Benin&Congo.xlsx", sheet = 2)
 
 CMR_df <- read_excel("data/cmr_data/Cameroon2.xlsx")
 
-GAB_df <- read_excel("data/gab_data/Gabon2.xlsx")  
+GAB_df <- read_excel("data/gab_data/Gabon2_GPS.xlsx")  
 ```
 
 ```{r}
@@ -66,10 +83,13 @@ BEN_Ct <- BEN_df %>%
          Ct_level_pm      = case_when((Ct_value_pm>0 & Ct_value_pm<=20) ~ "Low",
                                       (Ct_value_pm>20 & Ct_value_pm<=30) ~ "Moderate",
                                       (Ct_value_pm>30) ~ "High",
-                                      TRUE ~ "None"))
+                                      TRUE ~ "None"),
+         country          = "Benin",
+         Season           = case_when(Season %in% c("1DS", "2DS", "3SS") ~ "dry",
+                                      Season %in% c("1RS", "2RS") ~ "rainy"))
 
 CONG_Ct <- CON_df %>% 
-  dplyr::select(`Sample ID`, Sex, `Age (year)`,`Parasitaemia Pf (P/µl)`, 
+  dplyr::select(`Sample ID`, Sex, `Age (year)`, Season,`Parasitaemia Pf (P/µl)`, 
                 `Parasitaemia Pm (P/µl)`, `qRT-qPCR Pf positive`,
                 `qRT-qPCR Pm positive`, `Pf(Ct) mean`, `Pm(Ct) mean`)%>% 
   rename(Sample_ID        = `Sample ID`,
@@ -84,6 +104,7 @@ CONG_Ct <- CON_df %>%
                                 breaks = c(0, 5, 10, Inf),
                                 labels = c("<5", "5<10", "10+"),
                                 right  = FALSE),
+         Season           = case_when(is.na(Season) ~ "rainy"),
          Parasitaemia_Pf  = case_when(is.na(Parasitaemia_Pf) ~ 0,
                                      TRUE ~ as.numeric(Parasitaemia_Pf)),
          Parasitaemia_Pm  = case_when(is.na(Parasitaemia_Pm)~0,
@@ -103,7 +124,8 @@ CONG_Ct <- CON_df %>%
          Ct_level_pm      = case_when((Ct_value_pm>0 & Ct_value_pm<=20) ~ "Low",
                                       (Ct_value_pm>20 & Ct_value_pm<=30) ~ "Moderate",
                                       (Ct_value_pm>30) ~ "High",
-                                      TRUE ~ "None"))
+                                      TRUE ~ "None"),
+         country = "Congo")
 
 CMR_Ct <- CMR_df %>% 
   dplyr::select(district, ID, Season, age, parasitemia_pf, parasitemia_pm, pcr_pf,
@@ -132,7 +154,8 @@ CMR_Ct <- CMR_df %>%
          Ct_level_pm      = case_when((Ct_value_pm>0 & Ct_value_pm<=20) ~ "Low",
                                       (Ct_value_pm>20 & Ct_value_pm<=30) ~ "Moderate",
                                       (Ct_value_pm>30) ~ "High",
-                                      TRUE ~ "None"))
+                                      TRUE ~ "None"),
+         country = "Cameroon")
 
 GAB_Ct <- GAB_df %>% 
   dplyr::select(district, ID, season, age, parasitemia_pf, parasitemia_pm, pcr_pf, 
@@ -162,15 +185,50 @@ GAB_Ct <- GAB_df %>%
          Ct_level_pm      = case_when((Ct_value_pm>0 & Ct_value_pm<=20) ~ "Low",
                                       (Ct_value_pm>20 & Ct_value_pm<=30) ~ "Moderate",
                                       (Ct_value_pm>30) ~ "High",
-                                      TRUE ~ "None"))
+                                      TRUE ~ "None"),
+         country = "Gabon")
+
+country_summary <- bind_rows(
+  BEN_Ct,
+  CONG_Ct,
+  CMR_Ct,
+  GAB_Ct
+) %>% 
+  mutate(Season = as.factor(Season))
+
+
+ggplot(data = country_summary %>% filter(Ct_value_pm != 0), aes(x= Season, y = Ct_value_pm,
+                                                       fill = Season))+
+  geom_boxplot(alpha = 0.6, outlier.fill = NA)+
+  geom_jitter(width = 0.2, alpha = 0.5, color = "darkslategrey")+
+  scale_y_reverse()+
+  facet_wrap(~country, nrow = 2)+
+  scale_fill_brewer(palette = "Set2")+
+  labs(title = "Parasite burden (Ct value) by season",
+       x     = "Season",
+       y     = "PCR Ct value")
  
 ```
 
 ```{r}
+#| label: Relationship between age, season of sample collection and Ct values
+
+model1 <- lmer(Ct_value_pm ~ Age_group + Season + (1 | country), data = country_summary %>% filter(Ct_value_pm != 0)) 
+
+summary(model1)
+
+model2 <- lm(Ct_value_pm ~ Age_group + Season, data = country_summary %>% filter(country == "Benin" & Ct_value_pm != 0))  
+
+summary(model2)
+```
+
+
+
+```{r}
 #| label: Demographic and risk factor analysis
 
-boxplot_Ct_Age_Ben <- ggplot(data = BEN_Ct %>% filter(Ct_value_pm != 0), aes(x= Age_group, y = Ct_value_pm,
-                                                       fill = Age_group))+
+boxplot_Ct_Age_Ben <- ggplot(data = BEN_Ct %>% filter(Ct_value_pm != 0), 
+                             aes(x= Age_group, y = Ct_value_pm, fill = Age_group))+
   geom_boxplot(alpha = 0.6, outlier.fill = NA)+
   geom_jitter(width = 0.2, alpha = 0.5, color = "darkslategrey")+
   scale_y_reverse()+
