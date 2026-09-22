@@ -225,40 +225,40 @@ vif(fit1)
 # variogram, autocorrelation and prior ajustment
 
 ```{r}
-# Project to meters (important)
-
-sf_data <- st_transform(sampled_data_join_sf, 3857)
-
-# Empirical variogram
-
-v <- variogram(PR_Pm_tot ~ 1, data = sf_data)  # adjust cutoff to country size
-# fit an exponential model
-v.fit <- fit.variogram(v, model = vgm("Sph"))
-
-# plot empirical + fitted curve
-plot(v, v.fit)
-
-plot(v)
+# # Project to meters (important)
+# 
+# sf_data <- st_transform(sampled_data_join_sf, 3857)
+# 
+# # Empirical variogram
+# 
+# v <- variogram(PR_Pm_tot ~ 1, data = sf_data)  # adjust cutoff to country size
+# # fit an exponential model
+# v.fit <- fit.variogram(v, model = vgm("Sph"))
+# 
+# # plot empirical + fitted curve
+# plot(v, v.fit)
+# 
+# plot(v)
 
 ```
 
 ```{r}
-fit_cov <- lm(
-  PR_Pm_tot ~ annual_rainfall_2021 + pop_density_2020 +
-    dist_to_water + lc_water + lc_trees + lc_built +
-    lc_cropland + lc_wetland + vegetation_index,
-  data = sf_data
-)
-
-sf_data$resid <- residuals(fit_cov)
-
-coords <- st_coordinates(sf_data)
-
-# neighbors within, say, 50 km
-nb <- dnearneigh(coords, d1 = 0, d2 = 50000)
-lw <- nb2listw(nb, style = "W")
-
-moran.test(sf_data$resid, lw)
+# fit_cov <- lm(
+#   PR_Pm_tot ~ annual_rainfall_2021 + pop_density_2020 +
+#     dist_to_water + lc_water + lc_trees + lc_built +
+#     lc_cropland + lc_wetland + vegetation_index,
+#   data = sf_data
+# )
+# 
+# sf_data$resid <- residuals(fit_cov)
+# 
+# coords <- st_coordinates(sf_data)
+# 
+# # neighbors within, say, 50 km
+# nb <- dnearneigh(coords, d1 = 0, d2 = 50000)
+# lw <- nb2listw(nb, style = "W")
+# 
+# moran.test(sf_data$resid, lw)
 
 
 ```
@@ -272,162 +272,162 @@ The negative sign is tiny : not meaningful.
 
 
 ```{r}
-countries1_sf <- rbind(shp_gab %>% dplyr::select(COUNTRY, NAME_2, geometry) %>% 
-                         rename(country = COUNTRY,
-                                district = NAME_2), shp_con %>% dplyr::select(adm0_name,
-                                                                              adm2_name,
-                                                                              geometry) %>% 
-                         rename(country = adm0_name,
-                                district = adm2_name)) 
-
-
-countries_sf <- rbind(countries1_sf, shp_cmr %>% dplyr::select(Admin2, geometry) %>% 
-                        mutate(country = "Cameroon") %>% 
-                        rename(district = Admin2))
+# countries1_sf <- rbind(shp_gab %>% dplyr::select(COUNTRY, NAME_2, geometry) %>% 
+#                          rename(country = COUNTRY,
+#                                 district = NAME_2), shp_con %>% dplyr::select(adm0_name,
+#                                                                               adm2_name,
+#                                                                               geometry) %>% 
+#                          rename(country = adm0_name,
+#                                 district = adm2_name)) 
+# 
+# 
+# countries_sf <- rbind(countries1_sf, shp_cmr %>% dplyr::select(Admin2, geometry) %>% 
+#                         mutate(country = "Cameroon") %>% 
+#                         rename(district = Admin2))
 
 ```
 
 
 ```{r}
-sampled_data_join_sf$country_id <- as.integer(factor(sampled_data_join_sf$country))  # 1, 2, 3, 4
-
-sf_data <- st_as_sf(sampled_data_join_sf, coords = c("lon", "lat"), crs = 4326)
-sf_data <- st_transform(sf_data, 3857)
-sf_data <- sf_data %>% 
-  mutate(country_id = case_when(country_id %in% c(2, 3, 4) ~ 2,
-                                TRUE ~ country_id))
-
-coords <- st_coordinates(sf_data)
-
-coords_A <- coords[sf_data$country_id == 1, ]
-coords_B <- coords[sf_data$country_id == 2, ]
-
-
-country_A <- st_transform(shp_ben, 3857)
-country_B <- st_transform(countries_sf, 3857)
-
-country_A_union <- st_union(country_A)
-country_B_union <- st_union(country_B)
-
-country_A_simplified <- st_simplify(country_A_union, dTolerance = 10000)
-country_B_simplified <- st_simplify(country_B_union, dTolerance = 10000)
-
-
-# Extract geometry
-geom_A <- st_geometry(country_A_simplified)[[1]]
-
-# If MULTIPOLYGON : take the first polygon
-if (inherits(geom_A, "MULTIPOLYGON")) {
-  geom_A <- geom_A[[1]]
-}
-
-# Extract the OUTER ring only (first ring)
-outer_ring_A <- geom_A[[1]]
-
-# Convert to matrix with X,Y
-boundary_A <- as.matrix(outer_ring_A)[, 1:2, drop = FALSE]
-
-
-
-# country_B is an sf polygon or multipolygon
-geom_B <- st_geometry(country_B_simplified)[[1]]
-
-# If MULTIPOLYGON : take the first polygon
-if (inherits(geom_B, "MULTIPOLYGON")) {
-  geom_B <- geom_B[[1]]
-}
-
-# Extract the OUTER ring only (first ring)
-outer_ring_B <- geom_B[[1]]
-
-# Convert to matrix with X,Y
-boundary_B <- as.matrix(outer_ring_B)[, 1:2, drop = FALSE]
-
-
-
-# mesh_A <- inla.mesh.2d(loc = coords_A, max.edge = c(5000, 20000))
-# mesh_B <- inla.mesh.2d(loc = coords_B, max.edge = c(5000, 20000))
-# mesh_C <- inla.mesh.2d(loc = coords_C, max.edge = c(5000, 20000))
-
-mesh_A <- inla.mesh.2d(
-  loc      = coords_A,
-  boundary = list(boundary_A),
-  max.edge = c(50000, 300000),   # inner ~50 km, outer ~1000 km
-  cutoff   = 30000,
-  offset   = c(100000, 200000)
-)
-
-mesh_B <- inla.mesh.2d(
-  loc = coords_B,
-  boundary   = list(boundary_B) ,
-  max.edge = c(50000, 300000),   # inner ~30 km, outer ~80 km
-  cutoff   = 30000,
-  offset   = c(100000, 200000)
-)
-
-# Extract triangle vertex indices
-tri <- mesh_B$graph$tv
-
-
-# Build edges from triangles
-edges_list <- list()
-
-for (i in 1:nrow(tri)) {
-  idx <- tri[i, ]
-  # Each triangle has 3 edges
-  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_B$loc[idx[c(1,2)], 1:2])
-  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_B$loc[idx[c(2,3)], 1:2])
-  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_B$loc[idx[c(3,1)], 1:2])
-}
-
-mesh_edges_sf <- st_as_sf(st_sfc(edges_list, crs = 3857))
-
-coords_df_B <- as.data.frame(coords_B)
-colnames(coords_df_B) <- c("X", "Y")
-
-ggplot() +
-  geom_sf(data = country_B_simplified, fill = "white", color = "black", size = 0.8) +
-  geom_sf(data = mesh_edges_sf, color = "grey60", size = 0.3) +
-  geom_point(data = coords_df_B, aes(X, Y), color = "red", size = 1.5) +
-  theme_minimal() +
-  ggtitle("Mesh B with Country Boundary")
+# sampled_data_join_sf$country_id <- as.integer(factor(sampled_data_join_sf$country))  # 1, 2, 3, 4
+# 
+# sf_data <- st_as_sf(sampled_data_join_sf, coords = c("lon", "lat"), crs = 4326)
+# sf_data <- st_transform(sf_data, 3857)
+# sf_data <- sf_data %>% 
+#   mutate(country_id = case_when(country_id %in% c(2, 3, 4) ~ 2,
+#                                 TRUE ~ country_id))
+# 
+# coords <- st_coordinates(sf_data)
+# 
+# coords_A <- coords[sf_data$country_id == 1, ]
+# coords_B <- coords[sf_data$country_id == 2, ]
+# 
+# 
+# country_A <- st_transform(shp_ben, 3857)
+# country_B <- st_transform(countries_sf, 3857)
+# 
+# country_A_union <- st_union(country_A)
+# country_B_union <- st_union(country_B)
+# 
+# country_A_simplified <- st_simplify(country_A_union, dTolerance = 10000)
+# country_B_simplified <- st_simplify(country_B_union, dTolerance = 10000)
+# 
+# 
+# # Extract geometry
+# geom_A <- st_geometry(country_A_simplified)[[1]]
+# 
+# # If MULTIPOLYGON : take the first polygon
+# if (inherits(geom_A, "MULTIPOLYGON")) {
+#   geom_A <- geom_A[[1]]
+# }
+# 
+# # Extract the OUTER ring only (first ring)
+# outer_ring_A <- geom_A[[1]]
+# 
+# # Convert to matrix with X,Y
+# boundary_A <- as.matrix(outer_ring_A)[, 1:2, drop = FALSE]
+# 
+# 
+# 
+# # country_B is an sf polygon or multipolygon
+# geom_B <- st_geometry(country_B_simplified)[[1]]
+# 
+# # If MULTIPOLYGON : take the first polygon
+# if (inherits(geom_B, "MULTIPOLYGON")) {
+#   geom_B <- geom_B[[1]]
+# }
+# 
+# # Extract the OUTER ring only (first ring)
+# outer_ring_B <- geom_B[[1]]
+# 
+# # Convert to matrix with X,Y
+# boundary_B <- as.matrix(outer_ring_B)[, 1:2, drop = FALSE]
+# 
+# 
+# 
+# # mesh_A <- inla.mesh.2d(loc = coords_A, max.edge = c(5000, 20000))
+# # mesh_B <- inla.mesh.2d(loc = coords_B, max.edge = c(5000, 20000))
+# # mesh_C <- inla.mesh.2d(loc = coords_C, max.edge = c(5000, 20000))
+# 
+# mesh_A <- inla.mesh.2d(
+#   loc      = coords_A,
+#   boundary = list(boundary_A),
+#   max.edge = c(50000, 300000),   # inner ~50 km, outer ~1000 km
+#   cutoff   = 30000,
+#   offset   = c(100000, 200000)
+# )
+# 
+# mesh_B <- inla.mesh.2d(
+#   loc = coords_B,
+#   boundary   = list(boundary_B) ,
+#   max.edge = c(50000, 300000),   # inner ~30 km, outer ~80 km
+#   cutoff   = 30000,
+#   offset   = c(100000, 200000)
+# )
+# 
+# # Extract triangle vertex indices
+# tri <- mesh_B$graph$tv
+# 
+# 
+# # Build edges from triangles
+# edges_list <- list()
+# 
+# for (i in 1:nrow(tri)) {
+#   idx <- tri[i, ]
+#   # Each triangle has 3 edges
+#   edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_B$loc[idx[c(1,2)], 1:2])
+#   edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_B$loc[idx[c(2,3)], 1:2])
+#   edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_B$loc[idx[c(3,1)], 1:2])
+# }
+# 
+# mesh_edges_sf <- st_as_sf(st_sfc(edges_list, crs = 3857))
+# 
+# coords_df_B <- as.data.frame(coords_B)
+# colnames(coords_df_B) <- c("X", "Y")
+# 
+# ggplot() +
+#   geom_sf(data = country_B_simplified, fill = "white", color = "black", size = 0.8) +
+#   geom_sf(data = mesh_edges_sf, color = "grey60", size = 0.3) +
+#   geom_point(data = coords_df_B, aes(X, Y), color = "red", size = 1.5) +
+#   theme_minimal() +
+#   ggtitle("Mesh B with Country Boundary")
 
 ```
 
 ```{r}
-# Build Matérn SPDE model of the spatial field on mesh
-
-spde_A <- inla.spde2.pcmatern(
-  mesh = mesh_A,
-  prior.range = c(50000, 0.5),
-  prior.sigma = c(0.1, 0.5)
-)
-
-spde_B <- inla.spde2.pcmatern(
-  mesh = mesh_B,
-  prior.range = c(50000, 0.5),
-  prior.sigma = c(0.1, 0.5)   # 0.1 came from the squared root of the sill because it 
-)                              # represent the standard deviance while the sill represent the variance.
-
-# Computes the interpolation weights that map your SPDE spatial field (defined on mesh nodes) to your actual malaria data locations
-
-# 1. Create indicator weights (1 if the row belongs to the country, 0 if not)
-# 'coords' must be the full 36-row matrix of ALL coordinates
-w_A <- as.numeric(sf_data$country_id == 1)
-w_B <- as.numeric(sf_data$country_id == 2)
-
-# 2. Build the full matrices automatically. 
-# Passing the full 'coords' matrix ensures every matrix has exactly 36 rows.
-# The 'weights' argument forces rows from other countries to be completely zero.
-A_A_full <- inla.spde.make.A(mesh = mesh_A, loc = coords, weights = w_A)
-A_B_full <- inla.spde.make.A(mesh = mesh_B, loc = coords, weights = w_B)
-
-A_fixed <- Diagonal(n = nrow(sf_data))
-A_spatial <- list(A_A_full, A_B_full)
-
-
-A_A_full <- as(A_A_full, "dgCMatrix")
-A_B_full <- as(A_B_full, "dgCMatrix")
+# # Build Matérn SPDE model of the spatial field on mesh
+# 
+# spde_A <- inla.spde2.pcmatern(
+#   mesh = mesh_A,
+#   prior.range = c(50000, 0.5),
+#   prior.sigma = c(0.1, 0.5)
+# )
+# 
+# spde_B <- inla.spde2.pcmatern(
+#   mesh = mesh_B,
+#   prior.range = c(50000, 0.5),
+#   prior.sigma = c(0.1, 0.5)   # 0.1 came from the squared root of the sill because it 
+# )                              # represent the standard deviance while the sill represent the variance.
+# 
+# # Computes the interpolation weights that map your SPDE spatial field (defined on mesh nodes) to your actual malaria data locations
+# 
+# # 1. Create indicator weights (1 if the row belongs to the country, 0 if not)
+# # 'coords' must be the full 36-row matrix of ALL coordinates
+# w_A <- as.numeric(sf_data$country_id == 1)
+# w_B <- as.numeric(sf_data$country_id == 2)
+# 
+# # 2. Build the full matrices automatically. 
+# # Passing the full 'coords' matrix ensures every matrix has exactly 36 rows.
+# # The 'weights' argument forces rows from other countries to be completely zero.
+# A_A_full <- inla.spde.make.A(mesh = mesh_A, loc = coords, weights = w_A)
+# A_B_full <- inla.spde.make.A(mesh = mesh_B, loc = coords, weights = w_B)
+# 
+# A_fixed <- Diagonal(n = nrow(sf_data))
+# A_spatial <- list(A_A_full, A_B_full)
+# 
+# 
+# A_A_full <- as(A_A_full, "dgCMatrix")
+# A_B_full <- as(A_B_full, "dgCMatrix")
 
 ```
 
@@ -435,322 +435,322 @@ A_B_full <- as(A_B_full, "dgCMatrix")
 
 ```{r}
 
-#1. Variables to be scale
-vars_to_scale <- c("annual_rainfall_2021", "annual_temperature_2021", 
-                   "pop_density_2020", "dist_to_water", "vegetation_index",
-                   "elevation")
-
-# 2. Create a named list to store the training parameters (Means and SDs)
-scaling_stats <- list()
-
-# 3. Scale the observed data and extract the parameters
-for (var in vars_to_scale) {
-  # Calculate mean and standard deviation from the 36 observed points
-  mean_val <- mean(sf_data[[var]], na.rm = TRUE)
-  sd_val   <- sd(sf_data[[var]], na.rm = TRUE)
-  
-  # Store them for later use on the grid
-  scaling_stats[[var]] <- c(mean = mean_val, sd = sd_val)
-  
-  # Apply the scaling to the observed data
-  sf_data[[var]] <- (sf_data[[var]] - mean_val) / sd_val
-}
-
-################################################################################
-#        checking for over dispersion in our model
-################################################################################
-
-# 1. Calculate observed prevalence for each of the 36 villages
-village_p <- sf_data$Number_of_infected_tot_pf / sf_data$Number_of_participant_tot
-
-# 2. Calculate the global overall prevalence
-global_p <- sum(sf_data$Number_of_infected_tot_pf) / sum(sf_data$Number_of_participant_tot)
-
-# 3. Get the average number of participants per village
-mean_N <- mean(sf_data$Number_of_participant_tot)
-
-# 4. Calculate the Observed vs. Theoretical Variance
-observed_variance    <- var(village_p)
-theoretical_variance <- (global_p * (1 - global_p)) / mean_N
-
-# 5. Compute the Raw Dispersion Ratio
-raw_dispersion_ratio <- observed_variance / theoretical_variance
-print(raw_dispersion_ratio)
-
-# sf_data <- sf_data %>% 
-#   mutate(pop_density_2020 = as.numeric(scale(pop_density_2020)),
-#          annual_rainfall_2021 = as.numeric(scale(annual_rainfall_2021)),
-#          annual_temperature_2021 = as.numeric(scale(annual_temperature_2021)),
-#          vegetaion_index = as.numeric(scale(vegetaion_index)),
-#          dist_to_water  = as.numeric(scale(dist_to_water)),
-#          elevation = as.numeric(scale(elevation)))
-
-# Model building
-
-effects_fixed_rainfall <- data.frame(
-  intercept             = 1,
-  annual_rainfall_2021  = sf_data$annual_rainfall_2021,
-  vegetation_index      = sf_data$vegetation_index,
-  pop_density_2020      = sf_data$pop_density_2020,
-  dist_to_water         = sf_data$dist_to_water,
-  lc_water              = sf_data$lc_water,
-  lc_trees              = sf_data$lc_trees,
-  lc_built              = sf_data$lc_built,
-  lc_cropland           = sf_data$lc_cropland,
-  lc_wetland            = sf_data$lc_wetland
-  # annual_ITN_usage_2021 = sf_data$annual_ITN_usage_2021
-)
-
-effects_fixed_temperature <- data.frame(
-  intercept             = 1,
-  annual_temperature_2021  = sf_data$annual_temperature_2021,
-  vegetation_index      = sf_data$vegetation_index,
-  pop_density_2020      = sf_data$pop_density_2020,
-  dist_to_water         = sf_data$dist_to_water,
-  lc_water              = sf_data$lc_water,
-  lc_trees              = sf_data$lc_trees,
-  lc_built              = sf_data$lc_built,
-  lc_cropland           = sf_data$lc_cropland,
-  lc_wetland            = sf_data$lc_wetland
-  # annual_ITN_usage_2021 = sf_data$annual_ITN_usage_2021
-)
-
-
-effects_elevation      <- data.frame(
-  intercept             = 1,
-  elevation             = sf_data$elevation,
-  vegetation_index      = sf_data$vegetation_index,
-  pop_density_2020      = sf_data$pop_density_2020,
-  dist_to_water         = sf_data$dist_to_water,
-  lc_water              = sf_data$lc_water,
-  lc_trees              = sf_data$lc_trees,
-  lc_built              = sf_data$lc_built,
-  lc_cropland           = sf_data$lc_cropland,
-  lc_wetland            = sf_data$lc_wetland
-  # annual_ITN_usage_2021 = sf_data$annual_ITN_usage_2021
-)
-
-effects_fixed_baseline <- data.frame(
-  intercept             = 1,
-  vegetation_index      = sf_data$vegetation_index,
-  pop_density_2020      = sf_data$pop_density_2020,
-  dist_to_water         = sf_data$dist_to_water,
-  lc_water              = sf_data$lc_water,
-  lc_trees              = sf_data$lc_trees,
-  lc_built              = sf_data$lc_built,
-  lc_cropland           = sf_data$lc_cropland,
-  lc_wetland            = sf_data$lc_wetland
-  # annual_ITN_usage_2021 = sf_data$annual_ITN_usage_2021
-)
-
-
-effects_country <- list(
-  country_id = sf_data$country_id
-)
-
-effects_A <- list(field_A = 1:spde_A$n.spde)
-effects_B <- list(field_B = 1:spde_B$n.spde)
-
-A_fixed   <- Diagonal(nrow(sf_data))
-A_country <- Diagonal(nrow(sf_data))
-
-
-stack_test_rainfall <- inla.stack(
-  data = list(
-    y       = sf_data$Number_of_infected_tot_pf,
-    Ntrials = sf_data$Number_of_participant_tot
-  ),
-  A = list(
-    A_fixed,
-    A_country,
-    A_A_full,
-    A_B_full),
-  effects = list(
-    effects_fixed_rainfall,
-    effects_country,
-    effects_A,
-    effects_B),
-  tag = "est"
-)
-
-stack_test_temperature <- inla.stack(
-  data = list(
-    y       = sf_data$Number_of_infected_tot_pf,
-    Ntrials = sf_data$Number_of_participant_tot
-  ),
-  A = list(
-    A_fixed,
-    A_country,
-    A_A_full,
-    A_B_full),
-  effects = list(
-    effects_fixed_temperature,
-    effects_country,
-    effects_A,
-    effects_B),
-  tag = "est"
-)
-
-
-stack_test_elevation <- inla.stack(
-  data = list(
-    y       = sf_data$Number_of_infected_tot_pf,
-    Ntrials = sf_data$Number_of_participant_tot
-  ),
-  A = list(
-    A_fixed,
-    A_country,
-    A_A_full,
-    A_B_full),
-  effects = list(
-    effects_elevation,
-    effects_country,
-    effects_A,
-    effects_B),
-  tag = "est"
-)
-
-
-stack_test_baseline <- inla.stack(
-  data = list(
-    y       = sf_data$Number_of_infected_tot_pf,
-    Ntrials = sf_data$Number_of_participant_tot
-  ),
-  A = list(
-    A_fixed,
-    A_country,
-    A_A_full,
-    A_B_full),
-  effects = list(
-    effects_fixed_baseline,
-    effects_country,
-    effects_A,
-    effects_B),
-  tag = "est"
-)
+# #1. Variables to be scale
+# vars_to_scale <- c("annual_rainfall_2021", "annual_temperature_2021", 
+#                    "pop_density_2020", "dist_to_water", "vegetation_index",
+#                    "elevation")
+# 
+# # 2. Create a named list to store the training parameters (Means and SDs)
+# scaling_stats <- list()
+# 
+# # 3. Scale the observed data and extract the parameters
+# for (var in vars_to_scale) {
+#   # Calculate mean and standard deviation from the 36 observed points
+#   mean_val <- mean(sf_data[[var]], na.rm = TRUE)
+#   sd_val   <- sd(sf_data[[var]], na.rm = TRUE)
+#   
+#   # Store them for later use on the grid
+#   scaling_stats[[var]] <- c(mean = mean_val, sd = sd_val)
+#   
+#   # Apply the scaling to the observed data
+#   sf_data[[var]] <- (sf_data[[var]] - mean_val) / sd_val
+# }
+# 
+# ################################################################################
+# #        checking for over dispersion in our model
+# ################################################################################
+# 
+# # 1. Calculate observed prevalence for each of the 36 villages
+# village_p <- sf_data$Number_of_infected_tot_pf / sf_data$Number_of_participant_tot
+# 
+# # 2. Calculate the global overall prevalence
+# global_p <- sum(sf_data$Number_of_infected_tot_pf) / sum(sf_data$Number_of_participant_tot)
+# 
+# # 3. Get the average number of participants per village
+# mean_N <- mean(sf_data$Number_of_participant_tot)
+# 
+# # 4. Calculate the Observed vs. Theoretical Variance
+# observed_variance    <- var(village_p)
+# theoretical_variance <- (global_p * (1 - global_p)) / mean_N
+# 
+# # 5. Compute the Raw Dispersion Ratio
+# raw_dispersion_ratio <- observed_variance / theoretical_variance
+# print(raw_dispersion_ratio)
+# 
+# # sf_data <- sf_data %>% 
+# #   mutate(pop_density_2020 = as.numeric(scale(pop_density_2020)),
+# #          annual_rainfall_2021 = as.numeric(scale(annual_rainfall_2021)),
+# #          annual_temperature_2021 = as.numeric(scale(annual_temperature_2021)),
+# #          vegetaion_index = as.numeric(scale(vegetaion_index)),
+# #          dist_to_water  = as.numeric(scale(dist_to_water)),
+# #          elevation = as.numeric(scale(elevation)))
+# 
+# # Model building
+# 
+# effects_fixed_rainfall <- data.frame(
+#   intercept             = 1,
+#   annual_rainfall_2021  = sf_data$annual_rainfall_2021,
+#   vegetation_index      = sf_data$vegetation_index,
+#   pop_density_2020      = sf_data$pop_density_2020,
+#   dist_to_water         = sf_data$dist_to_water,
+#   lc_water              = sf_data$lc_water,
+#   lc_trees              = sf_data$lc_trees,
+#   lc_built              = sf_data$lc_built,
+#   lc_cropland           = sf_data$lc_cropland,
+#   lc_wetland            = sf_data$lc_wetland
+#   # annual_ITN_usage_2021 = sf_data$annual_ITN_usage_2021
+# )
+# 
+# effects_fixed_temperature <- data.frame(
+#   intercept             = 1,
+#   annual_temperature_2021  = sf_data$annual_temperature_2021,
+#   vegetation_index      = sf_data$vegetation_index,
+#   pop_density_2020      = sf_data$pop_density_2020,
+#   dist_to_water         = sf_data$dist_to_water,
+#   lc_water              = sf_data$lc_water,
+#   lc_trees              = sf_data$lc_trees,
+#   lc_built              = sf_data$lc_built,
+#   lc_cropland           = sf_data$lc_cropland,
+#   lc_wetland            = sf_data$lc_wetland
+#   # annual_ITN_usage_2021 = sf_data$annual_ITN_usage_2021
+# )
+# 
+# 
+# effects_elevation      <- data.frame(
+#   intercept             = 1,
+#   elevation             = sf_data$elevation,
+#   vegetation_index      = sf_data$vegetation_index,
+#   pop_density_2020      = sf_data$pop_density_2020,
+#   dist_to_water         = sf_data$dist_to_water,
+#   lc_water              = sf_data$lc_water,
+#   lc_trees              = sf_data$lc_trees,
+#   lc_built              = sf_data$lc_built,
+#   lc_cropland           = sf_data$lc_cropland,
+#   lc_wetland            = sf_data$lc_wetland
+#   # annual_ITN_usage_2021 = sf_data$annual_ITN_usage_2021
+# )
+# 
+# effects_fixed_baseline <- data.frame(
+#   intercept             = 1,
+#   vegetation_index      = sf_data$vegetation_index,
+#   pop_density_2020      = sf_data$pop_density_2020,
+#   dist_to_water         = sf_data$dist_to_water,
+#   lc_water              = sf_data$lc_water,
+#   lc_trees              = sf_data$lc_trees,
+#   lc_built              = sf_data$lc_built,
+#   lc_cropland           = sf_data$lc_cropland,
+#   lc_wetland            = sf_data$lc_wetland
+#   # annual_ITN_usage_2021 = sf_data$annual_ITN_usage_2021
+# )
+# 
+# 
+# effects_country <- list(
+#   country_id = sf_data$country_id
+# )
+# 
+# effects_A <- list(field_A = 1:spde_A$n.spde)
+# effects_B <- list(field_B = 1:spde_B$n.spde)
+# 
+# A_fixed   <- Diagonal(nrow(sf_data))
+# A_country <- Diagonal(nrow(sf_data))
+# 
+# 
+# stack_test_rainfall <- inla.stack(
+#   data = list(
+#     y       = sf_data$Number_of_infected_tot_pf,
+#     Ntrials = sf_data$Number_of_participant_tot
+#   ),
+#   A = list(
+#     A_fixed,
+#     A_country,
+#     A_A_full,
+#     A_B_full),
+#   effects = list(
+#     effects_fixed_rainfall,
+#     effects_country,
+#     effects_A,
+#     effects_B),
+#   tag = "est"
+# )
+# 
+# stack_test_temperature <- inla.stack(
+#   data = list(
+#     y       = sf_data$Number_of_infected_tot_pf,
+#     Ntrials = sf_data$Number_of_participant_tot
+#   ),
+#   A = list(
+#     A_fixed,
+#     A_country,
+#     A_A_full,
+#     A_B_full),
+#   effects = list(
+#     effects_fixed_temperature,
+#     effects_country,
+#     effects_A,
+#     effects_B),
+#   tag = "est"
+# )
+# 
+# 
+# stack_test_elevation <- inla.stack(
+#   data = list(
+#     y       = sf_data$Number_of_infected_tot_pf,
+#     Ntrials = sf_data$Number_of_participant_tot
+#   ),
+#   A = list(
+#     A_fixed,
+#     A_country,
+#     A_A_full,
+#     A_B_full),
+#   effects = list(
+#     effects_elevation,
+#     effects_country,
+#     effects_A,
+#     effects_B),
+#   tag = "est"
+# )
+# 
+# 
+# stack_test_baseline <- inla.stack(
+#   data = list(
+#     y       = sf_data$Number_of_infected_tot_pf,
+#     Ntrials = sf_data$Number_of_participant_tot
+#   ),
+#   A = list(
+#     A_fixed,
+#     A_country,
+#     A_A_full,
+#     A_B_full),
+#   effects = list(
+#     effects_fixed_baseline,
+#     effects_country,
+#     effects_A,
+#     effects_B),
+#   tag = "est"
+# )
 
 ```
 
 # Fit our models
 
 ```{r}
-# Penalize complexity which control how much countries differ from each other through
-# the country level random effect
-hyper_country <- list(
-  prec = list(prior = "pc.prec", param = c(0.5, 0.5))
-)
-
-formula_rainfall <- y ~ 
-  -1 +
-  intercept + annual_rainfall_2021 + pop_density_2020 + vegetation_index +
-  dist_to_water + lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + 
-  f(country_id, model="iid", hyper=hyper_country) +
-  f(field_A, model=spde_A) +
-  f(field_B, model=spde_B) 
-
-formula_temperature <- y ~ 
-  -1 +
-  intercept + annual_temperature_2021 + pop_density_2020 + vegetation_index +
-  dist_to_water + lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + 
-  f(country_id, model="iid", hyper=hyper_country) +
-  f(field_A, model=spde_A) +
-  f(field_B, model=spde_B) 
-
-formula_elevation <- y ~ 
-  -1 +
-  intercept + elevation + pop_density_2020 + dist_to_water + vegetation_index +
-  lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + 
-  f(country_id, model="iid", hyper=hyper_country) +
-  f(field_A, model=spde_A) +
-  f(field_B, model=spde_B) 
-
-formula_baseline <- y ~ 
-  -1 +
-  intercept + pop_density_2020 + dist_to_water + vegetation_index +
-  lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + 
-  f(country_id, model="iid", hyper=hyper_country) +
-  f(field_A, model=spde_A) +
-  f(field_B, model=spde_B) 
-
-
-
-res_rainfall <- inla(
-  formula_rainfall,
-  family = "binomial",
-  data = inla.stack.data(stack_test_rainfall),
-  Ntrials = inla.stack.data(stack_test_rainfall)$Ntrials,
-  control.predictor = list(
-    A = inla.stack.A(stack_test_rainfall),
-    compute = TRUE
-  ),
-  control.fixed = list(
-    mean = 0,
-    prec = 1
-  ),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
-)
-
-
-res_temperature <- inla(
-  formula_temperature,
-  family = "binomial",
-  data = inla.stack.data(stack_test_temperature),
-  Ntrials = inla.stack.data(stack_test_temperature)$Ntrials,
-  control.predictor = list(
-    A = inla.stack.A(stack_test_temperature),
-    compute = TRUE
-  ),
-  control.fixed = list(
-    mean = 0,
-    prec = 1
-  ),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
-)
-
-
-res_elevation <- inla(
-  formula_elevation,
-  family = "binomial",
-  data = inla.stack.data(stack_test_elevation),
-  Ntrials = inla.stack.data(stack_test_elevation)$Ntrials,
-  control.predictor = list(
-    A = inla.stack.A(stack_test_elevation),
-    compute = TRUE
-  ),
-  control.fixed = list(
-    mean = 0,
-    prec = 1
-  ),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
-)
-
-res_baseline <- inla(
-  formula_baseline,
-  family = "binomial",
-  data = inla.stack.data(stack_test_baseline),
-  Ntrials = inla.stack.data(stack_test_baseline)$Ntrials,
-  control.predictor = list(
-    A = inla.stack.A(stack_test_baseline),
-    compute = TRUE
-  ),
-  control.fixed = list(
-    mean = 0,
-    prec = 1
-  ),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
-)
-
-# ## diasgnostic on the distance to water
-# 
-# res_simple <- inla(
-#   Number_of_infected_tot_pm ~ dist_to_water,
-#   family = "binomial",
-#   data = sf_data,
-#   Ntrials = sf_data$Number_of_participant_tot
+# # Penalize complexity which control how much countries differ from each other through
+# # the country level random effect
+# hyper_country <- list(
+#   prec = list(prior = "pc.prec", param = c(0.5, 0.5))
 # )
 # 
-# res_simple$summary.fixed
-
+# formula_rainfall <- y ~ 
+#   -1 +
+#   intercept + annual_rainfall_2021 + pop_density_2020 + vegetation_index +
+#   dist_to_water + lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + 
+#   f(country_id, model="iid", hyper=hyper_country) +
+#   f(field_A, model=spde_A) +
+#   f(field_B, model=spde_B) 
+# 
+# formula_temperature <- y ~ 
+#   -1 +
+#   intercept + annual_temperature_2021 + pop_density_2020 + vegetation_index +
+#   dist_to_water + lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + 
+#   f(country_id, model="iid", hyper=hyper_country) +
+#   f(field_A, model=spde_A) +
+#   f(field_B, model=spde_B) 
+# 
+# formula_elevation <- y ~ 
+#   -1 +
+#   intercept + elevation + pop_density_2020 + dist_to_water + vegetation_index +
+#   lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + 
+#   f(country_id, model="iid", hyper=hyper_country) +
+#   f(field_A, model=spde_A) +
+#   f(field_B, model=spde_B) 
+# 
+# formula_baseline <- y ~ 
+#   -1 +
+#   intercept + pop_density_2020 + dist_to_water + vegetation_index +
+#   lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + 
+#   f(country_id, model="iid", hyper=hyper_country) +
+#   f(field_A, model=spde_A) +
+#   f(field_B, model=spde_B) 
+# 
+# 
+# 
+# res_rainfall <- inla(
+#   formula_rainfall,
+#   family = "binomial",
+#   data = inla.stack.data(stack_test_rainfall),
+#   Ntrials = inla.stack.data(stack_test_rainfall)$Ntrials,
+#   control.predictor = list(
+#     A = inla.stack.A(stack_test_rainfall),
+#     compute = TRUE
+#   ),
+#   control.fixed = list(
+#     mean = 0,
+#     prec = 1
+#   ),
+#   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+# )
+# 
+# 
+# res_temperature <- inla(
+#   formula_temperature,
+#   family = "binomial",
+#   data = inla.stack.data(stack_test_temperature),
+#   Ntrials = inla.stack.data(stack_test_temperature)$Ntrials,
+#   control.predictor = list(
+#     A = inla.stack.A(stack_test_temperature),
+#     compute = TRUE
+#   ),
+#   control.fixed = list(
+#     mean = 0,
+#     prec = 1
+#   ),
+#   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+# )
+# 
+# 
+# res_elevation <- inla(
+#   formula_elevation,
+#   family = "binomial",
+#   data = inla.stack.data(stack_test_elevation),
+#   Ntrials = inla.stack.data(stack_test_elevation)$Ntrials,
+#   control.predictor = list(
+#     A = inla.stack.A(stack_test_elevation),
+#     compute = TRUE
+#   ),
+#   control.fixed = list(
+#     mean = 0,
+#     prec = 1
+#   ),
+#   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+# )
+# 
+# res_baseline <- inla(
+#   formula_baseline,
+#   family = "binomial",
+#   data = inla.stack.data(stack_test_baseline),
+#   Ntrials = inla.stack.data(stack_test_baseline)$Ntrials,
+#   control.predictor = list(
+#     A = inla.stack.A(stack_test_baseline),
+#     compute = TRUE
+#   ),
+#   control.fixed = list(
+#     mean = 0,
+#     prec = 1
+#   ),
+#   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+# )
+# 
+# # ## diasgnostic on the distance to water
+# # 
+# # res_simple <- inla(
+# #   Number_of_infected_tot_pm ~ dist_to_water,
+# #   family = "binomial",
+# #   data = sf_data,
+# #   Ntrials = sf_data$Number_of_participant_tot
+# # )
+# # 
+# # res_simple$summary.fixed
+# 
 
 ```
 
@@ -768,346 +768,346 @@ weak, noisy, and driven mostly by priors rather than data.
 
 
 ```{r}
-effects_fixed_rainfall <- data.frame(
-  intercept             = 1,
-  annual_rainfall_2021  = sf_data$annual_rainfall_2021,
-  vegetation_index      = sf_data$vegetation_index,
-  pop_density_2020      = sf_data$pop_density_2020,
-  dist_to_water         = sf_data$dist_to_water,
-  lc_water              = sf_data$lc_water,
-  lc_trees              = sf_data$lc_trees,
-  lc_built              = sf_data$lc_built,
-  lc_cropland           = sf_data$lc_cropland,
-  lc_wetland            = sf_data$lc_wetland
-  # annual_ITN_usage_2021 = sf_data$annual_ITN_usage_2021
-)
-
-stack_test_rainfall <- inla.stack(
-  data = list(
-    y       = sf_data$Number_of_infected_tot_pm,
-    Ntrials = sf_data$Number_of_participant_tot
-  ),
-  A = list(
-    A_fixed,
-    A_country,
-    A_A_full,
-    A_B_full),
-  effects = list(
-    effects_fixed_rainfall,
-    effects_country,
-    effects_A,
-    effects_B),
-  tag = "est"
-)
-
-formula_rainfall <- y ~ 
-  -1 +
-  intercept + annual_rainfall_2021 + vegetation_index + pop_density_2020 + 
-  dist_to_water + lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + 
-  f(country_id, model="iid", hyper=hyper_country) +
-  f(field_A, model=spde_A) +
-  f(field_B, model=spde_B) 
-
-res_rainfall1 <- inla(
-  formula_rainfall,
-  family = "betabinomial",
-  data = inla.stack.data(stack_test_rainfall),
-  Ntrials = inla.stack.data(stack_test_rainfall)$Ntrials,
-  control.predictor = list(
-    A = inla.stack.A(stack_test_rainfall),
-    compute = TRUE
-  ),
-  control.fixed = list(
-    mean = 0,
-    prec = 1
-  ),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
-)
-
-hist(res_rainfall1$cpo$pit,
-     breaks = 20,
-     main = "PIT Histogram",
-     xlab = "PIT")
-
-res_rainfall1$dic$dic
-res_rainfall1$summary.fixed
-res_rainfall1$summary.fitted.values
-
-```
-
-
-
-# Comparing the different models
-
-```{r}
-# Model 1:  Rainfall
-
-# estimated values for the different covariates
-
-res_rainfall$summary.fixed
-
-# Hyper parameters examination
-
-res_rainfall$summary.hyperpar
-
-# DIC
-
-res_rainfall$dic$dic
-
-# WAIC
-
-res_rainfall$waic$waic
-
-# CPO
-
-sum(log(res_rainfall$cpo$cpo), na.rm = TRUE)
-
-summary(res_rainfall$cpo$cpo)
-
-# PIT(probability integral transform) histogram
-
-hist(res_rainfall$cpo$pit,
-     breaks = 20,
-     main = "PIT Histogram",
-     xlab = "PIT")
-
-# observed vs predicted prevalence
-
-obs <- inla.stack.data(stack_test_rainfall)$y /
-       inla.stack.data(stack_test_rainfall)$Ntrials
-
-idx.est <- inla.stack.index(stack_test_rainfall, "est")$data
-
-pred.est <- res_rainfall$summary.fitted.values$mean[idx.est]
-
-predicted_observed <- data.frame(obs = obs, pred = pred.est)
-
-ggplot(data.frame(obs = obs, pred = pred.est),
-       aes(x = obs, y = pred)) +
-  geom_point(alpha = 0.6) +
-  geom_abline(intercept = 0, slope = 1, color = "red", linewidth = 1) +
-  labs(title = "Observed vs predicted, rainfall model",
-    x = "Observed prevalence",
-    y = "Predicted prevalence"
-  ) +
-  theme_minimal()
-
-# residual plot
-
-residuals <- obs - pred.est
-
-ggplot(data.frame(pred = pred.est, resid = residuals),
-       aes(x = pred, y = resid)) +
-  geom_point(alpha = 0.6) +
-  geom_hline(yintercept = 0, color = "red", size = 1) +
-  labs(title = "residual rainfall model",
-    x = "Predicted",
-    y = "Residuals"
-  ) +
-  theme_minimal()
-
-
-```
-
-
-```{r}
-# Model 2:  temperature
-
-# estimated values for the different covariates
-
-res_temperature$summary.fixed
-
-# Hyper parameters examination
-
-res_temperature$summary.hyperpar
-
-# DIC
-
-res_temperature$dic$dic
-
-# WAIC
-
-res_temperature$waic$waic
-
-# CPO
-
-sum(log(res_temperature$cpo$cpo), na.rm = TRUE)
-
-summary(res_temperature$cpo$cpo)
-
-# PIT histogram
-
-hist(res_temperature$cpo$pit,
-     breaks = 20,
-     main = "PIT Histogram",
-     xlab = "PIT")
-
-# observed vs predicted prevalence
-
-idx.est <- inla.stack.index(stack_test_temperature, "est")$data
-
-pred.est <- res_temperature$summary.fitted.values$mean[idx.est]
-
-predicted_observed <- data.frame(obs = obs, pred = pred.est)
-
-ggplot(data.frame(obs = obs, pred = pred.est),
-       aes(x = obs, y = pred)) +
-  geom_point(alpha = 0.6) +
-  geom_abline(intercept = 0, slope = 1, color = "red", linewidth = 1) +
-  labs(title =  "Observed vs predicted, temperature model",
-    x = "Observed prevalence",
-    y = "Predicted prevalence"
-  ) +
-  theme_minimal()
-
-# residual plot
-
-residuals <- obs - pred.est
-
-ggplot(data.frame(pred = pred.est, resid = residuals),
-       aes(x = pred, y = resid)) +
-  geom_point(alpha = 0.6) +
-  geom_hline(yintercept = 0, color = "red", size = 1) +
-  labs(title = "residual temperature model",
-    x = "Predicted",
-    y = "Residuals"
-  ) +
-  theme_minimal()
+# effects_fixed_rainfall <- data.frame(
+#   intercept             = 1,
+#   annual_rainfall_2021  = sf_data$annual_rainfall_2021,
+#   vegetation_index      = sf_data$vegetation_index,
+#   pop_density_2020      = sf_data$pop_density_2020,
+#   dist_to_water         = sf_data$dist_to_water,
+#   lc_water              = sf_data$lc_water,
+#   lc_trees              = sf_data$lc_trees,
+#   lc_built              = sf_data$lc_built,
+#   lc_cropland           = sf_data$lc_cropland,
+#   lc_wetland            = sf_data$lc_wetland
+#   # annual_ITN_usage_2021 = sf_data$annual_ITN_usage_2021
+# )
+# 
+# stack_test_rainfall <- inla.stack(
+#   data = list(
+#     y       = sf_data$Number_of_infected_tot_pm,
+#     Ntrials = sf_data$Number_of_participant_tot
+#   ),
+#   A = list(
+#     A_fixed,
+#     A_country,
+#     A_A_full,
+#     A_B_full),
+#   effects = list(
+#     effects_fixed_rainfall,
+#     effects_country,
+#     effects_A,
+#     effects_B),
+#   tag = "est"
+# )
+# 
+# formula_rainfall <- y ~ 
+#   -1 +
+#   intercept + annual_rainfall_2021 + vegetation_index + pop_density_2020 + 
+#   dist_to_water + lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + 
+#   f(country_id, model="iid", hyper=hyper_country) +
+#   f(field_A, model=spde_A) +
+#   f(field_B, model=spde_B) 
+# 
+# res_rainfall1 <- inla(
+#   formula_rainfall,
+#   family = "betabinomial",
+#   data = inla.stack.data(stack_test_rainfall),
+#   Ntrials = inla.stack.data(stack_test_rainfall)$Ntrials,
+#   control.predictor = list(
+#     A = inla.stack.A(stack_test_rainfall),
+#     compute = TRUE
+#   ),
+#   control.fixed = list(
+#     mean = 0,
+#     prec = 1
+#   ),
+#   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+# )
+# 
+# hist(res_rainfall1$cpo$pit,
+#      breaks = 20,
+#      main = "PIT Histogram",
+#      xlab = "PIT")
+# 
+# res_rainfall1$dic$dic
+# res_rainfall1$summary.fixed
+# res_rainfall1$summary.fitted.values
+# 
+# ```
+# 
+# 
+# 
+# # Comparing the different models
+# 
+# ```{r}
+# # Model 1:  Rainfall
+# 
+# # estimated values for the different covariates
+# 
+# res_rainfall$summary.fixed
+# 
+# # Hyper parameters examination
+# 
+# res_rainfall$summary.hyperpar
+# 
+# # DIC
+# 
+# res_rainfall$dic$dic
+# 
+# # WAIC
+# 
+# res_rainfall$waic$waic
+# 
+# # CPO
+# 
+# sum(log(res_rainfall$cpo$cpo), na.rm = TRUE)
+# 
+# summary(res_rainfall$cpo$cpo)
+# 
+# # PIT(probability integral transform) histogram
+# 
+# hist(res_rainfall$cpo$pit,
+#      breaks = 20,
+#      main = "PIT Histogram",
+#      xlab = "PIT")
+# 
+# # observed vs predicted prevalence
+# 
+# obs <- inla.stack.data(stack_test_rainfall)$y /
+#        inla.stack.data(stack_test_rainfall)$Ntrials
+# 
+# idx.est <- inla.stack.index(stack_test_rainfall, "est")$data
+# 
+# pred.est <- res_rainfall$summary.fitted.values$mean[idx.est]
+# 
+# predicted_observed <- data.frame(obs = obs, pred = pred.est)
+# 
+# ggplot(data.frame(obs = obs, pred = pred.est),
+#        aes(x = obs, y = pred)) +
+#   geom_point(alpha = 0.6) +
+#   geom_abline(intercept = 0, slope = 1, color = "red", linewidth = 1) +
+#   labs(title = "Observed vs predicted, rainfall model",
+#     x = "Observed prevalence",
+#     y = "Predicted prevalence"
+#   ) +
+#   theme_minimal()
+# 
+# # residual plot
+# 
+# residuals <- obs - pred.est
+# 
+# ggplot(data.frame(pred = pred.est, resid = residuals),
+#        aes(x = pred, y = resid)) +
+#   geom_point(alpha = 0.6) +
+#   geom_hline(yintercept = 0, color = "red", size = 1) +
+#   labs(title = "residual rainfall model",
+#     x = "Predicted",
+#     y = "Residuals"
+#   ) +
+#   theme_minimal()
+# 
 
 ```
 
 
 ```{r}
-# Model 4:  elevation
+# # Model 2:  temperature
+# 
+# # estimated values for the different covariates
+# 
+# res_temperature$summary.fixed
+# 
+# # Hyper parameters examination
+# 
+# res_temperature$summary.hyperpar
+# 
+# # DIC
+# 
+# res_temperature$dic$dic
+# 
+# # WAIC
+# 
+# res_temperature$waic$waic
+# 
+# # CPO
+# 
+# sum(log(res_temperature$cpo$cpo), na.rm = TRUE)
+# 
+# summary(res_temperature$cpo$cpo)
+# 
+# # PIT histogram
+# 
+# hist(res_temperature$cpo$pit,
+#      breaks = 20,
+#      main = "PIT Histogram",
+#      xlab = "PIT")
+# 
+# # observed vs predicted prevalence
+# 
+# idx.est <- inla.stack.index(stack_test_temperature, "est")$data
+# 
+# pred.est <- res_temperature$summary.fitted.values$mean[idx.est]
+# 
+# predicted_observed <- data.frame(obs = obs, pred = pred.est)
+# 
+# ggplot(data.frame(obs = obs, pred = pred.est),
+#        aes(x = obs, y = pred)) +
+#   geom_point(alpha = 0.6) +
+#   geom_abline(intercept = 0, slope = 1, color = "red", linewidth = 1) +
+#   labs(title =  "Observed vs predicted, temperature model",
+#     x = "Observed prevalence",
+#     y = "Predicted prevalence"
+#   ) +
+#   theme_minimal()
+# 
+# # residual plot
+# 
+# residuals <- obs - pred.est
+# 
+# ggplot(data.frame(pred = pred.est, resid = residuals),
+#        aes(x = pred, y = resid)) +
+#   geom_point(alpha = 0.6) +
+#   geom_hline(yintercept = 0, color = "red", size = 1) +
+#   labs(title = "residual temperature model",
+#     x = "Predicted",
+#     y = "Residuals"
+#   ) +
+#   theme_minimal()
 
-# estimated values for the different covariates
+```
 
-res_elevation$summary.fixed
 
-# Hyper parameters examination
-
-res_elevation$summary.hyperpar
-
-# DIC
-
-res_elevation$dic$dic
-
-# WAIC
-
-res_elevation$waic$waic
-
-# CPO
-
-sum(log(res_elevation$cpo$cpo), na.rm = TRUE)
-
-summary(res_elevation$cpo$cpo)
-
-# PIT histogram
-
-hist(res_elevation$cpo$pit,
-     breaks = 20,
-     main = "PIT Histogram",
-     xlab = "PIT")
-
-# observed vs predicted prevalence
-
-idx.est <- inla.stack.index(stack_test_elevation, "est")$data
-
-pred.est <- res_elevation$summary.fitted.values$mean[idx.est]
-
-predicted_observed <- data.frame(obs = obs, pred = pred.est)
-
-ggplot(data.frame(obs = obs, pred = pred.est),
-       aes(x = obs, y = pred)) +
-  geom_point(alpha = 0.6) +
-  geom_abline(intercept = 0, slope = 1, color = "red", linewidth = 1) +
-  labs(title = "Observed vs predicted, elevation model",
-    x = "Observed prevalence",
-    y = "Predicted prevalence"
-  ) +
-  theme_minimal()
-
-# residual plot
-
-residuals <- obs - pred.est
-
-ggplot(data.frame(pred = pred.est, resid = residuals),
-       aes(x = pred, y = resid)) +
-  geom_point(alpha = 0.6) +
-  geom_hline(yintercept = 0, color = "red", size = 1) +
-  labs(title = "residual elevation model",
-    x = "Predicted",
-    y = "Residuals"
-  ) +
-  theme_minimal()
+```{r}
+# # Model 4:  elevation
+# 
+# # estimated values for the different covariates
+# 
+# res_elevation$summary.fixed
+# 
+# # Hyper parameters examination
+# 
+# res_elevation$summary.hyperpar
+# 
+# # DIC
+# 
+# res_elevation$dic$dic
+# 
+# # WAIC
+# 
+# res_elevation$waic$waic
+# 
+# # CPO
+# 
+# sum(log(res_elevation$cpo$cpo), na.rm = TRUE)
+# 
+# summary(res_elevation$cpo$cpo)
+# 
+# # PIT histogram
+# 
+# hist(res_elevation$cpo$pit,
+#      breaks = 20,
+#      main = "PIT Histogram",
+#      xlab = "PIT")
+# 
+# # observed vs predicted prevalence
+# 
+# idx.est <- inla.stack.index(stack_test_elevation, "est")$data
+# 
+# pred.est <- res_elevation$summary.fitted.values$mean[idx.est]
+# 
+# predicted_observed <- data.frame(obs = obs, pred = pred.est)
+# 
+# ggplot(data.frame(obs = obs, pred = pred.est),
+#        aes(x = obs, y = pred)) +
+#   geom_point(alpha = 0.6) +
+#   geom_abline(intercept = 0, slope = 1, color = "red", linewidth = 1) +
+#   labs(title = "Observed vs predicted, elevation model",
+#     x = "Observed prevalence",
+#     y = "Predicted prevalence"
+#   ) +
+#   theme_minimal()
+# 
+# # residual plot
+# 
+# residuals <- obs - pred.est
+# 
+# ggplot(data.frame(pred = pred.est, resid = residuals),
+#        aes(x = pred, y = resid)) +
+#   geom_point(alpha = 0.6) +
+#   geom_hline(yintercept = 0, color = "red", size = 1) +
+#   labs(title = "residual elevation model",
+#     x = "Predicted",
+#     y = "Residuals"
+#   ) +
+#   theme_minimal()
 
 
 ```
 
 
 ```{r}
-# Model 5:  baseline model
-
-# estimated values for the different covariates
-
-res_baseline$summary.fixed
-
-# Hyper parameters examination
-
-res_baseline$summary.hyperpar
-
-# DIC
-
-res_baseline$dic$dic
-
-# WAIC
-
-res_baseline$waic$waic
-
-# CPO
-
-sum(log(res_baseline$cpo$cpo), na.rm = TRUE)
-
-summary(res_baseline$cpo$cpo)
-
-# PIT histogram
-
-hist(res_baseline$cpo$pit,
-     breaks = 20,
-     main = "PIT Histogram",
-     xlab = "PIT")
-
-# observed vs predicted prevalence
-
-idx.est <- inla.stack.index(stack_test_baseline, "est")$data
-
-pred.est <- res_baseline$summary.fitted.values$mean[idx.est]
-
-predicted_observed <- data.frame(obs = obs, pred = pred.est)
-
-ggplot(data.frame(obs = obs, pred = pred.est),
-       aes(x = obs, y = pred)) +
-  geom_point(alpha = 0.6) +
-  geom_abline(intercept = 0, slope = 1, color = "red", linewidth = 1) +
-  labs(title = "Observed vs predicted, baseline model",
-    x = "Observed prevalence",
-    y = "Predicted prevalence"
-  ) +
-  theme_minimal()
-
-# residual plot
-
-residuals <- obs - pred.est
-
-ggplot(data.frame(pred = pred.est, resid = residuals),
-       aes(x = pred, y = resid)) +
-  geom_point(alpha = 0.6) +
-  geom_hline(yintercept = 0, color = "red", size = 1) +
-  labs(title = "residual baseline model",
-    x = "Predicted",
-    y = "Residuals"
-  ) +
-  theme_minimal()
+# # Model 5:  baseline model
+# 
+# # estimated values for the different covariates
+# 
+# res_baseline$summary.fixed
+# 
+# # Hyper parameters examination
+# 
+# res_baseline$summary.hyperpar
+# 
+# # DIC
+# 
+# res_baseline$dic$dic
+# 
+# # WAIC
+# 
+# res_baseline$waic$waic
+# 
+# # CPO
+# 
+# sum(log(res_baseline$cpo$cpo), na.rm = TRUE)
+# 
+# summary(res_baseline$cpo$cpo)
+# 
+# # PIT histogram
+# 
+# hist(res_baseline$cpo$pit,
+#      breaks = 20,
+#      main = "PIT Histogram",
+#      xlab = "PIT")
+# 
+# # observed vs predicted prevalence
+# 
+# idx.est <- inla.stack.index(stack_test_baseline, "est")$data
+# 
+# pred.est <- res_baseline$summary.fitted.values$mean[idx.est]
+# 
+# predicted_observed <- data.frame(obs = obs, pred = pred.est)
+# 
+# ggplot(data.frame(obs = obs, pred = pred.est),
+#        aes(x = obs, y = pred)) +
+#   geom_point(alpha = 0.6) +
+#   geom_abline(intercept = 0, slope = 1, color = "red", linewidth = 1) +
+#   labs(title = "Observed vs predicted, baseline model",
+#     x = "Observed prevalence",
+#     y = "Predicted prevalence"
+#   ) +
+#   theme_minimal()
+# 
+# # residual plot
+# 
+# residuals <- obs - pred.est
+# 
+# ggplot(data.frame(pred = pred.est, resid = residuals),
+#        aes(x = pred, y = resid)) +
+#   geom_point(alpha = 0.6) +
+#   geom_hline(yintercept = 0, color = "red", size = 1) +
+#   labs(title = "residual baseline model",
+#     x = "Predicted",
+#     y = "Residuals"
+#   ) +
+#   theme_minimal()
 
 ```
 
@@ -1152,54 +1152,54 @@ malaria biology making it the most reliable and scientifically justified
 model to continue with.
 
 ```{r}
-idx_est <- inla.stack.index(stack_test_temperature, "est")$data
-
-fitted_est <- res_temperature$summary.fitted.values[idx_est, "mean"]
-
-fitted_est_25 <- res_temperature$summary.fitted.values[idx_est, "0.025quant"]
-fitted_est_75 <- res_temperature$summary.fitted.values[idx_est, "0.975quant"]
-
-
-fitted_data <- cbind(
-  id        = idx_est, 
-  observed  = sf_data$PR_Pm_tot,
-  fitted    = fitted_est,
-  fitted_25 = fitted_est_25,
-  fitted_75 = fitted_est_75
-)
-
-fitted_data <- as.data.frame(fitted_data)
+# idx_est <- inla.stack.index(stack_test_temperature, "est")$data
+# 
+# fitted_est <- res_temperature$summary.fitted.values[idx_est, "mean"]
+# 
+# fitted_est_25 <- res_temperature$summary.fitted.values[idx_est, "0.025quant"]
+# fitted_est_75 <- res_temperature$summary.fitted.values[idx_est, "0.975quant"]
+# 
+# 
+# fitted_data <- cbind(
+#   id        = idx_est, 
+#   observed  = sf_data$PR_Pm_tot,
+#   fitted    = fitted_est,
+#   fitted_25 = fitted_est_25,
+#   fitted_75 = fitted_est_75
+# )
+# 
+# fitted_data <- as.data.frame(fitted_data)
 ```
 
 # Model examination
 
 ```{r}
-# observed vs fitted
-
-ggplot(fitted_data, aes(x = observed, y = fitted)) +
-  geom_point(color = "blue", size = 2) +
-  geom_abline(intercept = 0, slope = 1, color = "red", lwd = 1.2) +
-  labs(x = "Observed proportion",
-       y = "Fitted prevalence",
-       title = "Observed vs Fitted (INLA)") +
-  theme_minimal()
-
-# residual
-
-fitted_data$residuals <- fitted_data$observed - fitted_data$fitted
-
-ggplot(fitted_data, aes(x = 1:nrow(fitted_data), y = residuals)) +
-  geom_point(color = "darkgreen", size = 2) +
-  geom_hline(yintercept = 0, color = "red", lwd = 1.2) +
-  labs(x = "Location index",
-       y = "Residual (observed - fitted)",
-       title = "Residuals of INLA fitted values") +
-  theme_minimal()
-
-# SPDE hyper parameters
-
-res_temperature$summary.hyperpar
-
+# # observed vs fitted
+# 
+# ggplot(fitted_data, aes(x = observed, y = fitted)) +
+#   geom_point(color = "blue", size = 2) +
+#   geom_abline(intercept = 0, slope = 1, color = "red", lwd = 1.2) +
+#   labs(x = "Observed proportion",
+#        y = "Fitted prevalence",
+#        title = "Observed vs Fitted (INLA)") +
+#   theme_minimal()
+# 
+# # residual
+# 
+# fitted_data$residuals <- fitted_data$observed - fitted_data$fitted
+# 
+# ggplot(fitted_data, aes(x = 1:nrow(fitted_data), y = residuals)) +
+#   geom_point(color = "darkgreen", size = 2) +
+#   geom_hline(yintercept = 0, color = "red", lwd = 1.2) +
+#   labs(x = "Location index",
+#        y = "Residual (observed - fitted)",
+#        title = "Residuals of INLA fitted values") +
+#   theme_minimal()
+# 
+# # SPDE hyper parameters
+# 
+# res_temperature$summary.hyperpar
+# 
 
 ```
 
@@ -1235,124 +1235,124 @@ res_temperature$summary.hyperpar
 
 
 ```{r}
-grid_sf <- read_sf("data/grid_data_for_prediction_sf.gpkg")
-
-# Scale the prediction grid using the EXACT same parameters as in the fitting model
-# (This ensures a grid cell is measured relative to our 36 observed points)
-for (var in vars_to_scale) {
-  mean_val <- scaling_stats[[var]]["mean"]
-  sd_val   <- scaling_stats[[var]]["sd"]
-  
-  grid_sf[[var]] <- (grid_sf[[var]] - mean_val) / sd_val
-}
-
-
+# grid_sf <- read_sf("data/grid_data_for_prediction_sf.gpkg")
+# 
+# # Scale the prediction grid using the EXACT same parameters as in the fitting model
+# # (This ensures a grid cell is measured relative to our 36 observed points)
+# for (var in vars_to_scale) {
+#   mean_val <- scaling_stats[[var]]["mean"]
+#   sd_val   <- scaling_stats[[var]]["sd"]
+#   
+#   grid_sf[[var]] <- (grid_sf[[var]] - mean_val) / sd_val
+# }
+# 
+# 
+# # coords_pred <- st_coordinates(grid_sf)
+# # 
+# # coords_pred_A <- coords_pred[grid_sf$country_id == 1, ]
+# # coords_pred_B <- coords_pred[grid_sf$country_id == 2, ]
+# # coords_pred_C <- coords_pred[grid_sf$country_id == 3, ]
+# # 
+# # A_pred_A <- inla.spde.make.A(mesh = mesh_A, loc = coords_pred_A)
+# # A_pred_B <- inla.spde.make.A(mesh = mesh_B, loc = coords_pred_B)
+# # A_pred_C <- inla.spde.make.A(mesh = mesh_C, loc = coords_pred_C)
+# # 
+# # A_pred_A_full <- matrix(0, nrow = nrow(grid_sf), ncol = spde_A$n.spde)
+# # A_pred_B_full <- matrix(0, nrow = nrow(grid_sf), ncol = spde_B$n.spde)
+# # A_pred_C_full <- matrix(0, nrow = nrow(grid_sf), ncol = spde_C$n.spde)
+# # 
+# # A_pred_A_full[grid_sf$country_id == 1, ] <- as.matrix(A_pred_A)
+# # A_pred_B_full[grid_sf$country_id == 2, ] <- as.matrix(A_pred_B)
+# # A_pred_C_full[grid_sf$country_id == 3, ] <- as.matrix(A_pred_C)
+# 
+# 
+# # 1. Get the full coordinates matrix for all 37,515 grid cells
 # coords_pred <- st_coordinates(grid_sf)
 # 
-# coords_pred_A <- coords_pred[grid_sf$country_id == 1, ]
-# coords_pred_B <- coords_pred[grid_sf$country_id == 2, ]
-# coords_pred_C <- coords_pred[grid_sf$country_id == 3, ]
+# # 2. Create 0/1 indicator weights across ALL 37,515 rows
+# w_pred_A <- as.numeric(grid_sf$country_id == 1)
+# w_pred_B <- as.numeric(grid_sf$country_id == 2)
 # 
-# A_pred_A <- inla.spde.make.A(mesh = mesh_A, loc = coords_pred_A)
-# A_pred_B <- inla.spde.make.A(mesh = mesh_B, loc = coords_pred_B)
-# A_pred_C <- inla.spde.make.A(mesh = mesh_C, loc = coords_pred_C)
+# # 3. Build native, optimized Sparse Matrices (dgCMatrix) automatically.
+# # Passing 'coords_pred' means every matrix instantly has exactly 37,515 rows.
+# # 'weights' forces cells outside the country to stay zero efficiently.
+# A_pred_A_full <- inla.spde.make.A(mesh = mesh_A, loc = coords_pred, weights = w_pred_A)
+# A_pred_B_full <- inla.spde.make.A(mesh = mesh_B, loc = coords_pred, weights = w_pred_B)
 # 
-# A_pred_A_full <- matrix(0, nrow = nrow(grid_sf), ncol = spde_A$n.spde)
-# A_pred_B_full <- matrix(0, nrow = nrow(grid_sf), ncol = spde_B$n.spde)
-# A_pred_C_full <- matrix(0, nrow = nrow(grid_sf), ncol = spde_C$n.spde)
+# # Verify they are sparse structures
+# class(A_pred_A_full) # Should output "dgCMatrix"
 # 
-# A_pred_A_full[grid_sf$country_id == 1, ] <- as.matrix(A_pred_A)
-# A_pred_B_full[grid_sf$country_id == 2, ] <- as.matrix(A_pred_B)
-# A_pred_C_full[grid_sf$country_id == 3, ] <- as.matrix(A_pred_C)
-
-
-# 1. Get the full coordinates matrix for all 37,515 grid cells
-coords_pred <- st_coordinates(grid_sf)
-
-# 2. Create 0/1 indicator weights across ALL 37,515 rows
-w_pred_A <- as.numeric(grid_sf$country_id == 1)
-w_pred_B <- as.numeric(grid_sf$country_id == 2)
-
-# 3. Build native, optimized Sparse Matrices (dgCMatrix) automatically.
-# Passing 'coords_pred' means every matrix instantly has exactly 37,515 rows.
-# 'weights' forces cells outside the country to stay zero efficiently.
-A_pred_A_full <- inla.spde.make.A(mesh = mesh_A, loc = coords_pred, weights = w_pred_A)
-A_pred_B_full <- inla.spde.make.A(mesh = mesh_B, loc = coords_pred, weights = w_pred_B)
-
-# Verify they are sparse structures
-class(A_pred_A_full) # Should output "dgCMatrix"
-
-effects_fixed_pred <- data.frame(
-  intercept               = 1,
-  # annual_rainfall_2021    = grid_sf$annual_rainfall_2021,
-  annual_temperature_2021 = grid_sf$annual_temperature_2021,
-  pop_density_2020        = grid_sf$pop_density_2020,
-  vegetation_index        = sf_data$vegetation_index,
-  # annual_ITN_usage_2021   = grid_sf$annual_ITN_usage_2021,
-  dist_to_water           = grid_sf$dist_to_water,
-  lc_water                = grid_sf$lc_water,
-  lc_trees                = grid_sf$lc_trees,
-  lc_built                = grid_sf$lc_built,
-  lc_cropland             = grid_sf$lc_cropland,
-  lc_wetland              = grid_sf$lc_wetland)
-
-effects_country_pred <- list(country_id = grid_sf$country_id)
-
-effects_A_pred <- list(field_A = 1:spde_A$n.spde)
-effects_B_pred <- list(field_B = 1:spde_B$n.spde)
-
-stack_pred <- inla.stack(
-  data = list(y = NA,
-    Ntrials = NA),
-  A = list(
-    Diagonal(nrow(grid_sf)),      # fixed effects
-    Diagonal(nrow(grid_sf)),      # country iid
-    A_pred_A_full,                # spatial field A
-    A_pred_B_full),
-  effects = list(
-    effects_fixed_pred,
-    effects_country_pred,
-    effects_A_pred,
-    effects_B_pred),
-  tag = "pred"
-)
-
-stack_full <- inla.stack(stack_test_rainfall, stack_pred)
-
-res_pred <- inla(
-  formula_temperature,
-  family = "betabinomial",
-  data = inla.stack.data(stack_full),
-  Ntrials = inla.stack.data(stack_full)$Ntrials,
-  control.predictor = list(
-    A = inla.stack.A(stack_full),
-    compute = TRUE,
-    link = 1     
-  ),
-  control.fixed = list(mean = 0, prec = 1),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE,
-    config = TRUE)
-)
-
-#idx_pred <- inla.stack.index(stack_full, "pred")$data
-
-
-set.seed(123)
-samples <- inla.posterior.sample(100, res_pred)
-
-idx_pred <- inla.stack.index(stack_full, tag = "pred")$data
-
-pred_mat <- sapply(samples, function(s) {
-  lp <- s$latent[idx_pred]                   # linear predictor for grid cells
-  plogis(lp)                                 # convert logit  prevalence
-})
-
-
-grid_sf$prev_mean   <- rowMeans(pred_mat)
-grid_sf$prev_sd     <- apply(pred_mat, 1, sd)
-grid_sf$prev_q025   <- apply(pred_mat, 1, quantile, 0.025)
-grid_sf$prev_q975   <- apply(pred_mat, 1, quantile, 0.975)
-
+# effects_fixed_pred <- data.frame(
+#   intercept               = 1,
+#   # annual_rainfall_2021    = grid_sf$annual_rainfall_2021,
+#   annual_temperature_2021 = grid_sf$annual_temperature_2021,
+#   pop_density_2020        = grid_sf$pop_density_2020,
+#   vegetation_index        = sf_data$vegetation_index,
+#   # annual_ITN_usage_2021   = grid_sf$annual_ITN_usage_2021,
+#   dist_to_water           = grid_sf$dist_to_water,
+#   lc_water                = grid_sf$lc_water,
+#   lc_trees                = grid_sf$lc_trees,
+#   lc_built                = grid_sf$lc_built,
+#   lc_cropland             = grid_sf$lc_cropland,
+#   lc_wetland              = grid_sf$lc_wetland)
+# 
+# effects_country_pred <- list(country_id = grid_sf$country_id)
+# 
+# effects_A_pred <- list(field_A = 1:spde_A$n.spde)
+# effects_B_pred <- list(field_B = 1:spde_B$n.spde)
+# 
+# stack_pred <- inla.stack(
+#   data = list(y = NA,
+#     Ntrials = NA),
+#   A = list(
+#     Diagonal(nrow(grid_sf)),      # fixed effects
+#     Diagonal(nrow(grid_sf)),      # country iid
+#     A_pred_A_full,                # spatial field A
+#     A_pred_B_full),
+#   effects = list(
+#     effects_fixed_pred,
+#     effects_country_pred,
+#     effects_A_pred,
+#     effects_B_pred),
+#   tag = "pred"
+# )
+# 
+# stack_full <- inla.stack(stack_test_rainfall, stack_pred)
+# 
+# res_pred <- inla(
+#   formula_temperature,
+#   family = "betabinomial",
+#   data = inla.stack.data(stack_full),
+#   Ntrials = inla.stack.data(stack_full)$Ntrials,
+#   control.predictor = list(
+#     A = inla.stack.A(stack_full),
+#     compute = TRUE,
+#     link = 1     
+#   ),
+#   control.fixed = list(mean = 0, prec = 1),
+#   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE,
+#     config = TRUE)
+# )
+# 
+# #idx_pred <- inla.stack.index(stack_full, "pred")$data
+# 
+# 
+# set.seed(123)
+# samples <- inla.posterior.sample(100, res_pred)
+# 
+# idx_pred <- inla.stack.index(stack_full, tag = "pred")$data
+# 
+# pred_mat <- sapply(samples, function(s) {
+#   lp <- s$latent[idx_pred]                   # linear predictor for grid cells
+#   plogis(lp)                                 # convert logit  prevalence
+# })
+# 
+# 
+# grid_sf$prev_mean   <- rowMeans(pred_mat)
+# grid_sf$prev_sd     <- apply(pred_mat, 1, sd)
+# grid_sf$prev_q025   <- apply(pred_mat, 1, quantile, 0.025)
+# grid_sf$prev_q975   <- apply(pred_mat, 1, quantile, 0.975)
+# 
 
 
 # v1 <- res_pred$summary.fixed
@@ -1401,287 +1401,287 @@ robust.
 # *P. falciparum* prevalence from Malaria Atlas Project (MAP)
 
 ```{r}
-# Cameroon case
-
-# Load the modeled prevalence from MAP
-
-africa_pf_pr_2_10 <- rast("data/prevalence_2000/2025_GBD2024_Global_PfPR_2021.tif")
-
-grid_sf_vect <- vect(grid_sf %>% st_transform(4326))
-
-africa_pf_pr_2021 <- crop(africa_pf_pr_2_10, grid_sf_vect)
-africa_pf_pr_2021 <- mask(africa_pf_pr_2021, grid_sf_vect)
-
-grid_sf_map_prev <- terra::extract(africa_pf_pr_2021, grid_sf %>% st_transform(4326))
-
-grid_sf_map_prev <- grid_sf_map_prev %>% 
-  select(ID, Data, LCI, UCI)
-
-grid_sf <- grid_sf %>% 
-  mutate(PR_2_10_map     = grid_sf_map_prev[,2],
-         PR_2_10_map_L   = grid_sf_map_prev[,3],
-         PR_2_10_map_U   = grid_sf_map_prev[,4])
-
-numeric_cols <- names(grid_sf)[sapply(grid_sf, is.numeric)]
-
-for (col in numeric_cols) {
-  grid_sf <- fill_by_nearest(grid_sf, col)
-}
-
-grid_sf$PR_all_age <- mapply(
-  convertPrevalence,
-  prev         = grid_sf$PR_2_10_map,
-  age_min_in   = rep(2, nrow(grid_sf)),
-  age_max_in   = rep(10, nrow(grid_sf)),
-  age_min_out  = rep(0, nrow(grid_sf)),
-  age_max_out  = rep(99, nrow(grid_sf)),
-  parameters   = "Pf_Smith2007")
-
-grid_sf$PR_all_age_U <- mapply(
-  convertPrevalence,
-  prev         = grid_sf$PR_2_10_map_U,
-  age_min_in   = rep(2, nrow(grid_sf)),
-  age_max_in   = rep(10, nrow(grid_sf)),
-  age_min_out  = rep(0, nrow(grid_sf)),
-  age_max_out  = rep(99, nrow(grid_sf)),
-  parameters   = "Pf_Smith2007")
-
-grid_sf$PR_all_age_L <- mapply(
-  convertPrevalence,
-  prev         = grid_sf$PR_2_10_map_L,
-  age_min_in   = rep(2, nrow(grid_sf)),
-  age_max_in   = rep(10, nrow(grid_sf)),
-  age_min_out  = rep(0, nrow(grid_sf)),
-  age_max_out  = rep(99, nrow(grid_sf)),
-  parameters   = "Pf_Smith2007")
-
-
-
-grid_sf$GID_0 <- ifelse(grid_sf$country_id == 1, "BEN",
-                 ifelse(grid_sf$country_id == 2, "CMR",
-                 ifelse(grid_sf$country_id == 3, "COG", NA)))
-
-
-grid_benin <- grid_sf %>% filter(GID_0 == "BEN")
-shp_ben1 <-  st_transform(shp_ben, st_crs(grid_benin))
-
-grid_benin1 <- st_join(grid_benin, shp_ben1, join = st_intersects)
-
-ben_data_pev <- grid_benin1 %>%
-  group_by(NAME_2) %>%
-  summarise(
-    prev_mean        = mean(prev_mean, na.rm = TRUE),
-    PR_all_age       = mean(PR_all_age, na.rm = TRUE),
-    prev_q025        = mean(prev_q025, na.rm = TRUE),
-    prev_q975        = mean(prev_q975, na.rm = TRUE),
-    PR_all_age_U     = mean(PR_all_age_U, na.rm = TRUE),
-    PR_all_age_L     = mean(PR_all_age_L, na.rm = TRUE),
-    CI_width         = mean(prev_q975 - prev_q025, na.rm = TRUE),
-    CI_width_all_age = mean(PR_all_age_U - PR_all_age_L, na.rm = TRUE)
-  )
-
-
-ben_data_pev_map <- shp_ben %>% group_by(NAME_2) %>% summarise(geometry = st_union(geometry)) %>%
-  left_join(ben_data_pev %>% st_drop_geometry(), by = "NAME_2")
-
-ben_prev_1 <- ggplot(ben_data_pev_map) +
-  geom_sf(aes(fill = prev_mean), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Estimated Prevalence")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/ben_output/Pm_pr_estimated/benin_estimated_prev_pm.pdf",
-       plot = ben_prev_1, width = 6, height = 4, dpi = 300)
-
-
-ben_prev_uncertainty_1 <- ggplot(ben_data_pev_map) +
-  geom_sf(aes(fill = CI_width), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Credible interval width")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/ben_output/Pm_pr_estimated/benin_estimated_prev_uncertainty_pm.pdf",
-       plot = ben_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
-
-
-grid_cmr <- grid_sf %>% filter(GID_0 == "CMR")
-shp_cmr1 <-  st_transform(shp_cmr, st_crs(grid_cmr))
-
-grid_cmr1 <- st_join(grid_cmr, shp_cmr1, join = st_intersects)
-
-cmr_data_pev <- grid_cmr1 %>%
-  group_by(Admin2) %>%
-  summarise(
-    prev_mean        = mean(prev_mean, na.rm = TRUE),
-    PR_all_age       = mean(PR_all_age, na.rm = TRUE),
-    prev_q025        = mean(prev_q025, na.rm = TRUE),
-    prev_q975        = mean(prev_q975, na.rm = TRUE),
-    PR_all_age_U     = mean(PR_all_age_U, na.rm = TRUE),
-    PR_all_age_L     = mean(PR_all_age_L, na.rm = TRUE),
-    CI_width         = mean(prev_q975 - prev_q025, na.rm = TRUE),
-    CI_width_all_age = mean(PR_all_age_U - PR_all_age_L, na.rm = TRUE)
-  )
-
-
-cmr_data_pev_map <- shp_cmr %>%
-  left_join(cmr_data_pev %>% st_drop_geometry(), by = "Admin2")
-
-cmr_prev_1 <- ggplot(cmr_data_pev_map) +
-  geom_sf(aes(fill = prev_mean), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Estimated Prevalence")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cmr_output/Pm_pr_estimated/cmr_estimated_prev_pm.pdf", 
-       plot = cmr_prev_1, width = 6, height = 4, dpi = 300)
-
-cmr_prev_uncertainty_1 <- ggplot(cmr_data_pev_map) +
-  geom_sf(aes(fill = CI_width), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Credible interval width")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cmr_output/Pm_pr_estimated/cmr_estimated_prev_uncertainty_pm.pdf", 
-       plot = cmr_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
-
-
-grid_con <- grid_sf %>% filter(GID_0 == "COG")
-shp_con1 <-  st_transform(shp_con, st_crs(grid_con))
-
-grid_con1 <- st_join(grid_con, shp_con1, join = st_intersects)
-
-con_data_pev <- grid_con1 %>%
-  group_by(adm2_name) %>%
-  summarise(
-    prev_mean        = mean(prev_mean, na.rm = TRUE),
-    PR_all_age       = mean(PR_all_age, na.rm = TRUE),
-    prev_q025        = mean(prev_q025, na.rm = TRUE),
-    prev_q975        = mean(prev_q975, na.rm = TRUE),
-    PR_all_age_U     = mean(PR_all_age_U, na.rm = TRUE),
-    PR_all_age_L     = mean(PR_all_age_L, na.rm = TRUE),
-    CI_width         = mean(prev_q975 - prev_q025, na.rm = TRUE),
-    CI_width_all_age = mean(PR_all_age_U - PR_all_age_L, na.rm = TRUE)
-  )
-
-
-con_data_pev_map <- shp_con %>%
-  left_join(con_data_pev %>% st_drop_geometry(), by = "adm2_name")
-
-con_prev_1 <- ggplot(con_data_pev_map) +
-  geom_sf(aes(fill = prev_mean), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Estimated Prevalence")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cong_output/Pm_pr_estimated/cong_estimated_prev_pm.pdf", 
-       plot = con_prev_1, width = 6, height = 4, dpi = 300)
-
-
-con_prev_uncertainty_1 <- ggplot(con_data_pev_map) +
-  geom_sf(aes(fill = CI_width), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Credible interval width")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cong_output/Pm_pr_estimated/con_estimated_prev_uncertainty_pm.pdf", 
-       plot = con_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
+# # Cameroon case
+# 
+# # Load the modeled prevalence from MAP
+# 
+# africa_pf_pr_2_10 <- rast("data/prevalence_2000/2025_GBD2024_Global_PfPR_2021.tif")
+# 
+# grid_sf_vect <- vect(grid_sf %>% st_transform(4326))
+# 
+# africa_pf_pr_2021 <- crop(africa_pf_pr_2_10, grid_sf_vect)
+# africa_pf_pr_2021 <- mask(africa_pf_pr_2021, grid_sf_vect)
+# 
+# grid_sf_map_prev <- terra::extract(africa_pf_pr_2021, grid_sf %>% st_transform(4326))
+# 
+# grid_sf_map_prev <- grid_sf_map_prev %>% 
+#   select(ID, Data, LCI, UCI)
+# 
+# grid_sf <- grid_sf %>% 
+#   mutate(PR_2_10_map     = grid_sf_map_prev[,2],
+#          PR_2_10_map_L   = grid_sf_map_prev[,3],
+#          PR_2_10_map_U   = grid_sf_map_prev[,4])
+# 
+# numeric_cols <- names(grid_sf)[sapply(grid_sf, is.numeric)]
+# 
+# for (col in numeric_cols) {
+#   grid_sf <- fill_by_nearest(grid_sf, col)
+# }
+# 
+# grid_sf$PR_all_age <- mapply(
+#   convertPrevalence,
+#   prev         = grid_sf$PR_2_10_map,
+#   age_min_in   = rep(2, nrow(grid_sf)),
+#   age_max_in   = rep(10, nrow(grid_sf)),
+#   age_min_out  = rep(0, nrow(grid_sf)),
+#   age_max_out  = rep(99, nrow(grid_sf)),
+#   parameters   = "Pf_Smith2007")
+# 
+# grid_sf$PR_all_age_U <- mapply(
+#   convertPrevalence,
+#   prev         = grid_sf$PR_2_10_map_U,
+#   age_min_in   = rep(2, nrow(grid_sf)),
+#   age_max_in   = rep(10, nrow(grid_sf)),
+#   age_min_out  = rep(0, nrow(grid_sf)),
+#   age_max_out  = rep(99, nrow(grid_sf)),
+#   parameters   = "Pf_Smith2007")
+# 
+# grid_sf$PR_all_age_L <- mapply(
+#   convertPrevalence,
+#   prev         = grid_sf$PR_2_10_map_L,
+#   age_min_in   = rep(2, nrow(grid_sf)),
+#   age_max_in   = rep(10, nrow(grid_sf)),
+#   age_min_out  = rep(0, nrow(grid_sf)),
+#   age_max_out  = rep(99, nrow(grid_sf)),
+#   parameters   = "Pf_Smith2007")
+# 
+# 
+# 
+# grid_sf$GID_0 <- ifelse(grid_sf$country_id == 1, "BEN",
+#                  ifelse(grid_sf$country_id == 2, "CMR",
+#                  ifelse(grid_sf$country_id == 3, "COG", NA)))
+# 
+# 
+# grid_benin <- grid_sf %>% filter(GID_0 == "BEN")
+# shp_ben1 <-  st_transform(shp_ben, st_crs(grid_benin))
+# 
+# grid_benin1 <- st_join(grid_benin, shp_ben1, join = st_intersects)
+# 
+# ben_data_pev <- grid_benin1 %>%
+#   group_by(NAME_2) %>%
+#   summarise(
+#     prev_mean        = mean(prev_mean, na.rm = TRUE),
+#     PR_all_age       = mean(PR_all_age, na.rm = TRUE),
+#     prev_q025        = mean(prev_q025, na.rm = TRUE),
+#     prev_q975        = mean(prev_q975, na.rm = TRUE),
+#     PR_all_age_U     = mean(PR_all_age_U, na.rm = TRUE),
+#     PR_all_age_L     = mean(PR_all_age_L, na.rm = TRUE),
+#     CI_width         = mean(prev_q975 - prev_q025, na.rm = TRUE),
+#     CI_width_all_age = mean(PR_all_age_U - PR_all_age_L, na.rm = TRUE)
+#   )
+# 
+# 
+# ben_data_pev_map <- shp_ben %>% group_by(NAME_2) %>% summarise(geometry = st_union(geometry)) %>%
+#   left_join(ben_data_pev %>% st_drop_geometry(), by = "NAME_2")
+# 
+# ben_prev_1 <- ggplot(ben_data_pev_map) +
+#   geom_sf(aes(fill = prev_mean), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Estimated Prevalence")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/ben_output/Pm_pr_estimated/benin_estimated_prev_pm.pdf",
+#        plot = ben_prev_1, width = 6, height = 4, dpi = 300)
+# 
+# 
+# ben_prev_uncertainty_1 <- ggplot(ben_data_pev_map) +
+#   geom_sf(aes(fill = CI_width), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Credible interval width")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/ben_output/Pm_pr_estimated/benin_estimated_prev_uncertainty_pm.pdf",
+#        plot = ben_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
+# 
+# 
+# grid_cmr <- grid_sf %>% filter(GID_0 == "CMR")
+# shp_cmr1 <-  st_transform(shp_cmr, st_crs(grid_cmr))
+# 
+# grid_cmr1 <- st_join(grid_cmr, shp_cmr1, join = st_intersects)
+# 
+# cmr_data_pev <- grid_cmr1 %>%
+#   group_by(Admin2) %>%
+#   summarise(
+#     prev_mean        = mean(prev_mean, na.rm = TRUE),
+#     PR_all_age       = mean(PR_all_age, na.rm = TRUE),
+#     prev_q025        = mean(prev_q025, na.rm = TRUE),
+#     prev_q975        = mean(prev_q975, na.rm = TRUE),
+#     PR_all_age_U     = mean(PR_all_age_U, na.rm = TRUE),
+#     PR_all_age_L     = mean(PR_all_age_L, na.rm = TRUE),
+#     CI_width         = mean(prev_q975 - prev_q025, na.rm = TRUE),
+#     CI_width_all_age = mean(PR_all_age_U - PR_all_age_L, na.rm = TRUE)
+#   )
+# 
+# 
+# cmr_data_pev_map <- shp_cmr %>%
+#   left_join(cmr_data_pev %>% st_drop_geometry(), by = "Admin2")
+# 
+# cmr_prev_1 <- ggplot(cmr_data_pev_map) +
+#   geom_sf(aes(fill = prev_mean), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Estimated Prevalence")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cmr_output/Pm_pr_estimated/cmr_estimated_prev_pm.pdf", 
+#        plot = cmr_prev_1, width = 6, height = 4, dpi = 300)
+# 
+# cmr_prev_uncertainty_1 <- ggplot(cmr_data_pev_map) +
+#   geom_sf(aes(fill = CI_width), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Credible interval width")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cmr_output/Pm_pr_estimated/cmr_estimated_prev_uncertainty_pm.pdf", 
+#        plot = cmr_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
+# 
+# 
+# grid_con <- grid_sf %>% filter(GID_0 == "COG")
+# shp_con1 <-  st_transform(shp_con, st_crs(grid_con))
+# 
+# grid_con1 <- st_join(grid_con, shp_con1, join = st_intersects)
+# 
+# con_data_pev <- grid_con1 %>%
+#   group_by(adm2_name) %>%
+#   summarise(
+#     prev_mean        = mean(prev_mean, na.rm = TRUE),
+#     PR_all_age       = mean(PR_all_age, na.rm = TRUE),
+#     prev_q025        = mean(prev_q025, na.rm = TRUE),
+#     prev_q975        = mean(prev_q975, na.rm = TRUE),
+#     PR_all_age_U     = mean(PR_all_age_U, na.rm = TRUE),
+#     PR_all_age_L     = mean(PR_all_age_L, na.rm = TRUE),
+#     CI_width         = mean(prev_q975 - prev_q025, na.rm = TRUE),
+#     CI_width_all_age = mean(PR_all_age_U - PR_all_age_L, na.rm = TRUE)
+#   )
+# 
+# 
+# con_data_pev_map <- shp_con %>%
+#   left_join(con_data_pev %>% st_drop_geometry(), by = "adm2_name")
+# 
+# con_prev_1 <- ggplot(con_data_pev_map) +
+#   geom_sf(aes(fill = prev_mean), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Estimated Prevalence")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cong_output/Pm_pr_estimated/cong_estimated_prev_pm.pdf", 
+#        plot = con_prev_1, width = 6, height = 4, dpi = 300)
+# 
+# 
+# con_prev_uncertainty_1 <- ggplot(con_data_pev_map) +
+#   geom_sf(aes(fill = CI_width), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Credible interval width")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cong_output/Pm_pr_estimated/con_estimated_prev_uncertainty_pm.pdf", 
+#        plot = con_prev_uncertainty_1, width = 6, height = 4, dpi = 300)
 ```
 
 ```{r}
-cmr_prev_pf_MAP_estimates <- ggplot(cmr_data_pev_map) +
-  geom_sf(aes(fill = PR_all_age), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence of Pf")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cmr_output/MAP_pr_modeled/cmr_pr_MAP_pf_all_age.pdf",
-       plot = cmr_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
-
-cmr_prev_pf_MAP_estimates_uncertainty <- ggplot(cmr_data_pev) +
-  geom_sf(aes(fill = CI_width_all_age), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence estimates uncertainty of P.f")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cmr_output/MAP_pr_modeled/cmr_pr_uncertainty_MAP_pf_all_age.pdf",
-       plot = cmr_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
-
-
-# Benin case
-
-ben_prev_pf_MAP_estimates <- ggplot(ben_data_pev_map) +
-  geom_sf(aes(fill = PR_all_age), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence of Pf")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/ben_output/MAP_pr_modeled/ben_pr_MAP_pf_all_age.pdf",
-       plot = ben_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
-
-ben_prev_pf_MAP_estimates_uncertainty <- ggplot(ben_data_pev) +
-  geom_sf(aes(fill = CI_width_all_age), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence estimates uncertainty of P.f")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/ben_output/MAP_pr_modeled/ben_pr_uncertainty_MAP_pf_all_age.png",
-       plot = ben_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
-
-# Congo case
-
-con_prev_pf_MAP_estimates <- ggplot(con_data_pev_map) +
-  geom_sf(aes(fill = PR_all_age), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence of P.f")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cong_output/MAP_pr_modeled/con_pr_MAP_pf_all_age.pdf",
-       plot = con_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
-
-con_prev_pf_MAP_estimates_uncertainty <- ggplot(con_data_pev) +
-  geom_sf(aes(fill = CI_width_all_age), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence estimates uncertainty of P.f")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cong_output/MAP_pr_modeled/con_pr_uncertainty_MAP_pf_all_age.png",
-       plot = con_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
+# cmr_prev_pf_MAP_estimates <- ggplot(cmr_data_pev_map) +
+#   geom_sf(aes(fill = PR_all_age), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Prevalence of Pf")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cmr_output/MAP_pr_modeled/cmr_pr_MAP_pf_all_age.pdf",
+#        plot = cmr_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
+# 
+# cmr_prev_pf_MAP_estimates_uncertainty <- ggplot(cmr_data_pev) +
+#   geom_sf(aes(fill = CI_width_all_age), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Prevalence estimates uncertainty of P.f")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cmr_output/MAP_pr_modeled/cmr_pr_uncertainty_MAP_pf_all_age.pdf",
+#        plot = cmr_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
+# 
+# 
+# # Benin case
+# 
+# ben_prev_pf_MAP_estimates <- ggplot(ben_data_pev_map) +
+#   geom_sf(aes(fill = PR_all_age), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Prevalence of Pf")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/ben_output/MAP_pr_modeled/ben_pr_MAP_pf_all_age.pdf",
+#        plot = ben_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
+# 
+# ben_prev_pf_MAP_estimates_uncertainty <- ggplot(ben_data_pev) +
+#   geom_sf(aes(fill = CI_width_all_age), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Prevalence estimates uncertainty of P.f")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/ben_output/MAP_pr_modeled/ben_pr_uncertainty_MAP_pf_all_age.png",
+#        plot = ben_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
+# 
+# # Congo case
+# 
+# con_prev_pf_MAP_estimates <- ggplot(con_data_pev_map) +
+#   geom_sf(aes(fill = PR_all_age), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Prevalence of P.f")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cong_output/MAP_pr_modeled/con_pr_MAP_pf_all_age.pdf",
+#        plot = con_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
+# 
+# con_prev_pf_MAP_estimates_uncertainty <- ggplot(con_data_pev) +
+#   geom_sf(aes(fill = CI_width_all_age), color = NA) +
+#   scale_fill_viridis_c(option = "magma") +
+#   labs(title = "Prevalence estimates uncertainty of P.f")+
+#   theme_bw(base_size = 15)+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cong_output/MAP_pr_modeled/con_pr_uncertainty_MAP_pf_all_age.png",
+#        plot = con_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
 
 ```
 
@@ -1690,140 +1690,140 @@ ggsave("Outputs/cong_output/MAP_pr_modeled/con_pr_uncertainty_MAP_pf_all_age.png
 ```{r}
 # Divide the burden into classes
 
-ben_data_pev_map <- ben_data_pev_map %>% 
-  mutate(trans_intensity_comal = cut(
-    prev_mean,
-    breaks = quantile(prev_mean, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
-    labels = c("Low", "Medium", "High"),
-    include.lowest = TRUE),
-    trans_intensity_map = cut(
-    PR_all_age,
-    breaks = quantile(PR_all_age, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
-    labels = c("Low", "Medium", "High"),
-    include.lowest = TRUE))
-
-
-cmr_data_pev_map <- cmr_data_pev_map %>% 
-  mutate(trans_intensity_comal = cut(
-    prev_mean,
-    breaks = quantile(prev_mean, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
-    labels = c("Low", "Medium", "High"),
-    include.lowest = TRUE),
-    trans_intensity_map = cut(
-    PR_all_age,
-    breaks = quantile(PR_all_age, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
-    labels = c("Low", "Medium", "High"),
-    include.lowest = TRUE))
-
-con_data_pev_map <- con_data_pev_map %>% 
-  mutate(trans_intensity_comal = cut(
-    prev_mean,
-    breaks = quantile(prev_mean, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
-    labels = c("Low", "Medium", "High"),
-    include.lowest = TRUE),
-    trans_intensity_map = cut(
-    PR_all_age,
-    breaks = quantile(PR_all_age, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
-    labels = c("Low", "Medium", "High"),
-    include.lowest = TRUE))
-
-
-# Rank correlation analysis
-
-spearman_res_ben <- cor.test(ben_data_pev_map$prev_mean, ben_data_pev_map$PR_all_age, method = "spearman")
-
-spearman_res_cmr <- cor.test(cmr_data_pev_map$prev_mean, cmr_data_pev_map$PR_all_age, method = "spearman")
-spearman_res_con <- cor.test(con_data_pev_map$prev_mean, con_data_pev_map$PR_all_age, method = "spearman")
-
-comal_trans_intens_cmr <- ggplot(cmr_data_pev_map%>% drop_na())+
-  geom_sf(aes(fill = trans_intensity_comal), color = "white", size = 0.2)+
-  scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
-  labs(title = "COMAL transmission classes (Quantiles)")+
-  theme_void()+
-  coord_sf()+
-  theme_minimal()+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cmr_output/Pf_pr_estimated/comal_trans_intens_cmr.png",
-       plot = comal_trans_intens_cmr, width = 6, height = 4, dpi = 300)
-
-
-map_trans_intens_cmr <- ggplot(cmr_data_pev_map%>% drop_na())+
-  geom_sf(aes(fill = trans_intensity_map), color = "white", size = 0.2)+
-  scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
-  labs(title = "MAP transmission classes (Quantiles)")+
-  theme_void()+
-  coord_sf()+
-  theme_minimal()+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cmr_output/MAP_pr_modeled/map_trans_intens_cmr.png",
-       plot = map_trans_intens_cmr, width = 6, height = 4, dpi = 300)
-
-
-comal_trans_intens_ben <- ggplot(ben_data_pev_map%>% drop_na())+
-  geom_sf(aes(fill = trans_intensity_comal), color = "white", size = 0.2)+
-  scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
-  labs(title = "COMAL transmission classes (Quantiles)")+
-  theme_void()+
-  coord_sf()+
-  theme_minimal()+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/ben_output/Pf_pr_estimated/comal_trans_intens_ben.png",
-       plot = comal_trans_intens_ben, width = 6, height = 4, dpi = 300)
-
-
-map_trans_intens_ben <- ggplot(ben_data_pev_map%>% drop_na())+
-  geom_sf(aes(fill = trans_intensity_map), color = "white", size = 0.2)+
-  scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
-  labs(title = "MAP transmission classes (Quantiles)")+
-  theme_void()+
-  coord_sf()+
-  theme_minimal()+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/ben_output/MAP_pr_modeled/map_trans_intens_ben.png",
-       plot = map_trans_intens_ben, width = 6, height = 4, dpi = 300)
-
-
-comal_trans_intens_cong <- ggplot(con_data_pev_map%>% drop_na())+
-  geom_sf(aes(fill = trans_intensity_comal), color = "white", size = 0.2)+
-  scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
-  labs(title = "COMAL transmission classes (Quantiles)")+
-  theme_void()+
-  coord_sf()+
-  theme_minimal()+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cong_output/Pf_pr_estimated/comal_trans_intens_cong.png",
-       plot = comal_trans_intens_cong, width = 6, height = 4, dpi = 300)
-
-
-map_trans_intens_cong <- ggplot(con_data_pev_map%>% drop_na())+
-  geom_sf(aes(fill = trans_intensity_map), color = "white", size = 0.2)+
-  scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
-  labs(title = "MAP transmission classes (Quantiles)")+
-  theme_void()+
-  coord_sf()+
-  theme_minimal()+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
-
-ggsave("Outputs/cong_output/MAP_pr_modeled/map_trans_intens_cong.png",
-       plot = map_trans_intens_cong, width = 6, height = 4, dpi = 300)
-
+# ben_data_pev_map <- ben_data_pev_map %>% 
+#   mutate(trans_intensity_comal = cut(
+#     prev_mean,
+#     breaks = quantile(prev_mean, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
+#     labels = c("Low", "Medium", "High"),
+#     include.lowest = TRUE),
+#     trans_intensity_map = cut(
+#     PR_all_age,
+#     breaks = quantile(PR_all_age, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
+#     labels = c("Low", "Medium", "High"),
+#     include.lowest = TRUE))
+# 
+# 
+# cmr_data_pev_map <- cmr_data_pev_map %>% 
+#   mutate(trans_intensity_comal = cut(
+#     prev_mean,
+#     breaks = quantile(prev_mean, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
+#     labels = c("Low", "Medium", "High"),
+#     include.lowest = TRUE),
+#     trans_intensity_map = cut(
+#     PR_all_age,
+#     breaks = quantile(PR_all_age, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
+#     labels = c("Low", "Medium", "High"),
+#     include.lowest = TRUE))
+# 
+# con_data_pev_map <- con_data_pev_map %>% 
+#   mutate(trans_intensity_comal = cut(
+#     prev_mean,
+#     breaks = quantile(prev_mean, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
+#     labels = c("Low", "Medium", "High"),
+#     include.lowest = TRUE),
+#     trans_intensity_map = cut(
+#     PR_all_age,
+#     breaks = quantile(PR_all_age, probs = seq(0, 1, length.out = 4), na.rm = TRUE),
+#     labels = c("Low", "Medium", "High"),
+#     include.lowest = TRUE))
+# 
+# 
+# # Rank correlation analysis
+# 
+# spearman_res_ben <- cor.test(ben_data_pev_map$prev_mean, ben_data_pev_map$PR_all_age, method = "spearman")
+# 
+# spearman_res_cmr <- cor.test(cmr_data_pev_map$prev_mean, cmr_data_pev_map$PR_all_age, method = "spearman")
+# spearman_res_con <- cor.test(con_data_pev_map$prev_mean, con_data_pev_map$PR_all_age, method = "spearman")
+# 
+# comal_trans_intens_cmr <- ggplot(cmr_data_pev_map%>% drop_na())+
+#   geom_sf(aes(fill = trans_intensity_comal), color = "white", size = 0.2)+
+#   scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
+#   labs(title = "COMAL transmission classes (Quantiles)")+
+#   theme_void()+
+#   coord_sf()+
+#   theme_minimal()+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cmr_output/Pf_pr_estimated/comal_trans_intens_cmr.png",
+#        plot = comal_trans_intens_cmr, width = 6, height = 4, dpi = 300)
+# 
+# 
+# map_trans_intens_cmr <- ggplot(cmr_data_pev_map%>% drop_na())+
+#   geom_sf(aes(fill = trans_intensity_map), color = "white", size = 0.2)+
+#   scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
+#   labs(title = "MAP transmission classes (Quantiles)")+
+#   theme_void()+
+#   coord_sf()+
+#   theme_minimal()+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cmr_output/MAP_pr_modeled/map_trans_intens_cmr.png",
+#        plot = map_trans_intens_cmr, width = 6, height = 4, dpi = 300)
+# 
+# 
+# comal_trans_intens_ben <- ggplot(ben_data_pev_map%>% drop_na())+
+#   geom_sf(aes(fill = trans_intensity_comal), color = "white", size = 0.2)+
+#   scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
+#   labs(title = "COMAL transmission classes (Quantiles)")+
+#   theme_void()+
+#   coord_sf()+
+#   theme_minimal()+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/ben_output/Pf_pr_estimated/comal_trans_intens_ben.png",
+#        plot = comal_trans_intens_ben, width = 6, height = 4, dpi = 300)
+# 
+# 
+# map_trans_intens_ben <- ggplot(ben_data_pev_map%>% drop_na())+
+#   geom_sf(aes(fill = trans_intensity_map), color = "white", size = 0.2)+
+#   scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
+#   labs(title = "MAP transmission classes (Quantiles)")+
+#   theme_void()+
+#   coord_sf()+
+#   theme_minimal()+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/ben_output/MAP_pr_modeled/map_trans_intens_ben.png",
+#        plot = map_trans_intens_ben, width = 6, height = 4, dpi = 300)
+# 
+# 
+# comal_trans_intens_cong <- ggplot(con_data_pev_map%>% drop_na())+
+#   geom_sf(aes(fill = trans_intensity_comal), color = "white", size = 0.2)+
+#   scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
+#   labs(title = "COMAL transmission classes (Quantiles)")+
+#   theme_void()+
+#   coord_sf()+
+#   theme_minimal()+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cong_output/Pf_pr_estimated/comal_trans_intens_cong.png",
+#        plot = comal_trans_intens_cong, width = 6, height = 4, dpi = 300)
+# 
+# 
+# map_trans_intens_cong <- ggplot(con_data_pev_map%>% drop_na())+
+#   geom_sf(aes(fill = trans_intensity_map), color = "white", size = 0.2)+
+#   scale_fill_brewer(palette = "YlOrRd", name = "Classe", na.value = "transparent")+
+#   labs(title = "MAP transmission classes (Quantiles)")+
+#   theme_void()+
+#   coord_sf()+
+#   theme_minimal()+
+#   theme(axis.text.x = element_text)+
+#   theme(axis.text.x = element_blank(),
+#         axis.text.y = element_blank())
+# 
+# ggsave("Outputs/cong_output/MAP_pr_modeled/map_trans_intens_cong.png",
+#        plot = map_trans_intens_cong, width = 6, height = 4, dpi = 300)
+# 
 
 ```
 
