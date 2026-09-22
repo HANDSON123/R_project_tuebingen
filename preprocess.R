@@ -547,4 +547,76 @@ mapview(shp_con,
           layer.name = "P. malariae prevalence")
 
 
+################################################################################
+#                 Simplification of the African map                            #
+################################################################################
 
+```{r}
+shp_global <- read_sf("data/Africa_data/shape_files_1/geoBoundariesCGAZ_ADM2.shp")
+
+custom_match <- c(
+  XKX = "Europe",
+  ESH = "Africa",
+  `111` = "Africa",        # Abyei
+  `112` = "Asia",          # Aksai Chin
+  `113` = "Asia",          # China–India border
+  `114` = "Asia",          # Demchok
+  `115` = "Europe",        # Dragonja
+  `116` = "Africa",        # Dramana-Shakatoe
+  `117` = "South America", # Falkland Islands
+  `118` = "Asia",          # Gaza Strip
+  `119` = "Asia",          # Kalapani
+  `120` = "South America", # Isla Brasilera
+  `121` = "Asia",          # Siachen-Saltoro
+  `122` = "Africa",        # Koualou
+  `123` = "Asia",          # Liancourt Rocks
+  `124` = "Asia",          # No Man's Land
+  `125` = "Asia",          # Paracel Islands
+  `126` = "Asia",          # Sanafir & Tiran Islands
+  `127` = "Asia",          # Senkaku Islands
+  `128` = "Asia",          # Spratly Islands
+  `129` = "Asia"           # West Bank
+)
+
+shp_global$continent <- countrycode(
+  shp_global$shapeGroup,
+  origin = "iso3c",
+  destination = "continent",
+  custom_match = custom_match
+)
+
+shp_africa <- shp_global %>% 
+  filter(continent=="Africa")
+
+custom_match <- c(
+  `111` = "Abyei",                   # Abyei
+  `116` = "Dramana-Shakatoe",        # Dramana-Shakatoe
+  `122` = "Koualou"                  # Koualou
+)
+
+
+shp_africa$country <- countrycode(
+  shp_africa$shapeGroup,
+  origin = "iso3c",
+  destination = "country.name",
+  custom_match = custom_match
+)
+
+shp_africa_simple <- ms_simplify(
+  shp_africa,
+  keep = 0.05,          # keep 5% of the vertices
+  keep_shapes = TRUE
+)
+
+st_write(
+  shp_africa_simple,
+  "data/Africa_data/shp_africa/Africa_simplified.shp",
+  delete_layer = TRUE,
+  append = TRUE
+)
+
+
+ggplot()+
+  geom_sf(data = shp_africa_simple, fill = "grey", color = "black")
+
+```

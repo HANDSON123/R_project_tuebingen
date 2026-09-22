@@ -222,6 +222,17 @@ model2 <- lm(Ct_value_pm ~ Age_group + Season, data = country_summary %>% filter
 summary(model2)
 ```
 
+```{r}
+#| label: Relationship between age, season of sample collection and Ct values
+
+model1 <- lmer(Ct_value_pf ~ Age_group + Season + (1 | country), data = country_summary %>% filter(Ct_value_pf != 0)) 
+
+summary(model1)
+
+model2 <- lm(Ct_value_pf ~ Age_group + Season, data = country_summary %>% filter(country == "Benin" & Ct_value_pf != 0))  
+
+summary(model2)
+```
 
 
 ```{r}
@@ -288,7 +299,6 @@ ggsave("Outputs/gab_output/Ct_Age_GAB.png", plot = boxplot_Ct_Age_GAB, width = 6
 
 -   For Gabon we still have `<5` and `5<10` age group which are the ones with the lowest Ct value whereas `10+` is the one with the highest Ct value.
 
-
 ```{r}
 #| label: disease burden per age group
   
@@ -351,7 +361,6 @@ ggplot(age_prev,
 
 ```
 
-
 ```{r}
 #| label: Ct values at country level 
 
@@ -409,15 +418,7 @@ ggplot(pm_positive,
   theme_minimal()
 ```
 
-
-- So at the country level, Cameroon has the highest Ct level and also the highest
-prevalence which means high prevalence might not necessary mean severity of the 
-disease but instead a hidden reservoir of the parasite transmission with low
-density of parasite load. But if we look closely to countries like Benin, 
-Gabon, Congo, we will see that Benin has the prevalence value but all those three
-countries have almost the same level of Ct values which mean with the data we
-have, we cannot draw an effective conclusion with the data we have.
-
+-   So at the country level, Cameroon has the highest Ct level and also the highest prevalence which means high prevalence might not necessary mean severity of the disease but instead a hidden reservoir of the parasite transmission with low density of parasite load. But if we look closely to countries like Benin, Gabon, Congo, we will see that Benin has the prevalence value but all those three countries have almost the same level of Ct values which mean with the data we have, we cannot draw an effective conclusion with the data we have.
 
 ```{r}
 #| label: Age vs Ct values
@@ -466,24 +467,18 @@ co_inf <- bind_rows(
   count(Country,Positive_pf, Positive_pm)
 ```
 
+```{r}
 
+```
 
 ```{r}
 
 ```
 
-
 ```{r}
 
 ```
 
-
 ```{r}
 
 ```
-
-
-```{r}
-
-```
-

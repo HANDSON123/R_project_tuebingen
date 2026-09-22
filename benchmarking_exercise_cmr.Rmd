@@ -15,6 +15,9 @@ knitr::opts_chunk$set(echo = TRUE)
 library(malariaAtlas)
 library(sf)
 library(leaflet)
+library(mapview)
+library(htmlwidgets)
+library(webshot2)
 library(ggplot2)
 library(RColorBrewer)
 library(leafpop)
@@ -24,18 +27,12 @@ library(readxl)
 library(corrplot)
 library(MODISTools)
 library(terra)
-library(mapview)
 library(spData)
 library(gganimate)
-library(htmlwidgets)
-library(webshot)
-library(chirps)
 library(viridis)
-library(patchwork)
 library(GGally)
 library(spdep)
 library(INLA)
-library(leafsync)
 library(SpatialEpi)
 library(geodata)
 library(tidygeocoder)
@@ -44,14 +41,38 @@ library(car)
 library(gstat)
 library(raster)
 library(FNN)
+library(rmapshaper)
+library(tidyterra)
+library(fmesher)
 ```
 
 
 ```{r}
-#set the working directory
-
-setwd("C:/Users/USER/Documents/Research project tubingen/R_project_tuebingen/")
+## Function: fill NA values in one column using nearest non‑NA neighbor
+fill_by_nearest <- function(sf_obj, colname) {
+  
+  # rows with non‑missing values
+  non_na <- sf_obj %>% filter(!is.na(.data[[colname]]))
+  
+  # rows with missing values
+  na_rows <- sf_obj %>% filter(is.na(.data[[colname]]))
+  
+  # if no NA: return unchanged
+  if (nrow(na_rows) == 0) return(sf_obj)
+  
+  # find nearest non‑NA feature for each NA row
+  nearest_id <- st_nearest_feature(na_rows, non_na)
+  
+  # extract the corresponding values
+  replacement_values <- non_na[[colname]][nearest_id]
+  
+  # fill the NA values
+  sf_obj[[colname]][is.na(sf_obj[[colname]])] <- replacement_values
+  
+  sf_obj
+}
 ```
+
 
 ```{r}
 # Downloading the malaria dataset
@@ -65,20 +86,32 @@ setwd("C:/Users/USER/Documents/Research project tubingen/R_project_tuebingen/")
 
 
 ```{r}
-GPS_cmr <- st_read("cmr_data/GPS location 2011/CMGE61FL.shp")
+GPS_cmr_2011 <- st_read("data/cmr_data/GPS location 2011/CMGE61FL.shp")
+GPS_cmr_2022 <- st_read("data/cmr_data/GPS location 2022/CMGE81FL.shp")
 
-head(GPS_cmr)
-names(GPS_cmr)
+
+shp_cmr <- read_sf("data/cmr_data/CMR_shape_file/cameroun_districts_2024.shp")
+
+cmr_vect <- vect(shp_cmr)
 
 ```
 
 
 ```{r}
-GPS_cmr_coords <- GPS_cmr %>%
+GPS_cmr_coords_2011 <- GPS_cmr_2011 %>%
   st_drop_geometry() %>%
   mutate(
-    longitude = st_coordinates(GPS_cmr)[, 1],
-    latitude  = st_coordinates(GPS_cmr)[, 2]
+    longitude = st_coordinates(GPS_cmr_2011)[, 1],
+    latitude  = st_coordinates(GPS_cmr_2011)[, 2]
+  ) %>%
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  filter(latitude != 0 & longitude != 0)
+
+GPS_cmr_coords_2022 <- GPS_cmr_2022 %>%
+  st_drop_geometry() %>%
+  mutate(
+    longitude = st_coordinates(GPS_cmr_2022)[, 1],
+    latitude  = st_coordinates(GPS_cmr_2022)[, 2]
   ) %>%
   dplyr::select(DHSCLUST, longitude, latitude) %>%
   filter(latitude != 0 & longitude != 0)
@@ -87,7 +120,7 @@ GPS_cmr_coords <- GPS_cmr %>%
 # loading the extracted MAP data
 
 ```{r}
-raw_prevalence_cmr <- read.csv("cmr_data/cmr_map_PR.csv")
+raw_prevalence_cmr <- read.csv("data/cmr_data/cmr_map_PR.csv")
 
 raw_prevalence_cmr_with_coord <- raw_prevalence_cmr %>% 
   filter(!is.na(longitude) & !is.na(latitude))
@@ -100,75 +133,109 @@ raw_prevalence_cmr_without_coord <- raw_prevalence_cmr %>%
 map_without_coords_cmr <- raw_prevalence_cmr_without_coord %>%
   mutate(cluster_num = as.integer(substr(dhs_id, 9, 16)))
 
-map_recovered_cmr <- map_without_coords_cmr %>%
-  left_join(GPS_cmr_coords, by = c("cluster_num" = "DHSCLUST"))
+map_recovered_cmr_2011 <- map_without_coords_cmr %>%
+  left_join(GPS_cmr_coords_2011, by = c("cluster_num" = "DHSCLUST"))
 
-cat("Recovered:", sum(!is.na(map_recovered_cmr$longitude)), "\n")
-cat("Still missing:", sum(is.na(map_recovered_cmr$longitude)), "\n")
+
+map_recovered_cmr_2022 <- map_without_coords_cmr %>%
+  left_join(GPS_cmr_coords_2022, by = c("cluster_num" = "DHSCLUST"))
+
+cat("Recovered:", sum(!is.na(map_recovered_cmr_2011$longitude)), "\n")
+cat("Still missing:", sum(is.na(map_recovered_cmr_2011$longitude)), "\n")
 ```
+
+
+
 ```{r}
-map_full_cmr <- bind_rows(
+map_full_cmr_2011 <- bind_rows(
   raw_prevalence_cmr_with_coord %>% filter(!is.na(longitude) & !is.na(latitude)),
-  map_recovered_cmr %>% filter(!is.na(longitude) & !is.na(latitude))
+  map_recovered_cmr_2011 %>% filter(!is.na(longitude) & !is.na(latitude))
 )
 
-write_csv(map_full_cmr, file = "cmr_data/cmr_MAP_full_raw_prevalence.csv")
+map_full_cmr_2011 <- map_full_cmr_2011 %>%
+  filter(year_start == 2011) %>%
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  filter(species == "P. falciparum")
+
+
+write_csv(map_full_cmr_2011, file = "data/cmr_data/cmr_MAP_full_raw_prevalence_2011.csv")
+
+map_full_cmr_2022 <- bind_rows(
+  raw_prevalence_cmr_with_coord %>% filter(!is.na(longitude) & !is.na(latitude)),
+  map_recovered_cmr_2022 %>% filter(!is.na(longitude) & !is.na(latitude))
+)
+
+map_full_cmr_2022 <- map_full_cmr_2022 %>%
+  filter(year_start == 2022) %>%
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  filter(species == "P. falciparum")
+
+
+write_csv(map_full_cmr_2022, file = "data/cmr_data/cmr_MAP_full_raw_prevalence_2022.csv")
 ```
 
 # Filter for the year 2011 for our analysis
 
 ```{r}
-map_2011_cmr <- map_full_cmr %>%
-  filter(year_start == 2011) %>%
-  filter(!is.na(longitude) & !is.na(latitude))
+map_2011_cmr <- st_read("data/cmr_data/cmr_MAP_full_raw_prevalence_2011.csv")
 
 map_2011_cmr_sf <- st_as_sf(map_2011_cmr, coords = c("longitude", "latitude"), crs = 4326)
+
+
+breaks_pr <- c(0, 0.05, 0.10, 0.20, 0.40, 0.60, 1)
+labels_pr <- c(
+  "0–5%", "5–10%", "10–20%", "20–40%", "40–60%", ">60%"
+)
+
+colors_pr <- c(
+  "#ffffcc",  # pale yellow (very low)
+  "#ffeda0",  # light yellow
+  "#feb24c",  # orange
+  "#fd8d3c",  # deep orange
+  "#f03b20",  # red
+  "#bd0026"   # dark red (very high)
+)
+
+map_2011_cmr_sf$pr <- as.numeric(map_2011_cmr_sf$pr)
+
+map_2011_cmr_sf$pr_class <- cut(
+  map_2011_cmr_sf$pr,
+  breaks = breaks_pr,
+  labels = labels_pr,
+  include.lowest = TRUE
+)
+
+mapviewOptions(viewer.suppress = T)
+map <- mapview(shp_cmr,
+        col.regions = "white",
+        alpha.regions = 0.2,
+        color = "black") +
+  mapview(map_2011_cmr_sf,
+          zcol = "pr_class",             # categorical variable
+          cex = "examined",
+          col.regions = colors_pr,       # one color per class
+          layer.name = "P. malariae prevalence",
+          legend = TRUE)
+
+
+# Save widget manually
+htmlwidgets::saveWidget(map@map, "Outputs/cmr_output/raw_prevalence_map.html", selfcontained = FALSE)
+
+# Capture screenshot with webshot2
+webshot2::webshot("Outputs/cmr_output/raw_prevalence_map.html",
+                  "Outputs/cmr_output/raw_prevalence_map.png", vwidth = 1200, vheight = 900)
+# mapshot2(map, file = "Outputs/cmr_output/raw_prevalence_map.png")
+# mapshot2(map, "Outputs/cmr_output/raw_prevalence_map.html", selfcontained = TRUE)
+
 
 plot(st_geometry(map_2011_cmr_sf), pch = 16, cex = 0.5, main = "2011 Survey Points — Cameroon")
 ```
 
+# Extraction of the covariates  
 ```{r}
-coords <- cbind(map_2011_cmr$longitude, map_2011_cmr$latitude)
-
-mesh <- inla.mesh.2d(
-  loc      = coords,
-  max.edge = c(0.5, 2),
-  cutoff   = 0.05,
-  offset   = c(0.5, 1)
-)
-
-# Extract triangle vertices
-triangles <- mesh$graph$tv
-
-# Build polygons
-mesh_list <- lapply(1:nrow(triangles), function(i) {
-  coords_i <- mesh$loc[triangles[i, ], 1:2]
-  coords_i <- rbind(coords_i, coords_i[1, ])  # close polygon
-  st_polygon(list(coords_i))
-})
-
-mesh_sf <- st_as_sf(st_sfc(mesh_list))
-coords_sf <- st_as_sf(
-  data.frame(x = coords[,1], y = coords[,2]),
-  coords = c("x", "y"),
-  crs = NA
-)
-
-
-# Plot
-Mesh <- ggplot() +
-  geom_sf(data = mesh_sf, fill = NA, color = "grey40") +
-  geom_sf(data = coords_sf, color = "red", size = 0.8) +
-  theme_minimal()
-
-# ggsave("cmr_data/mesh_map_data.png", plot = Mesh, width = 8, height = 10, dpi = 150)
-```
-
-# Extraction of the covariates at the sampled location 
-```{r}
-path1 <- "cmr_data/chirps_2011/CHIRPS_PENTAD_precipitation_2011-01-01_2011-12-31_-5p8264to13p9448N_0p6930to19p1696E.precipitation.tif"
-path2 <- "cmr_data/ERA5_temperature/ERA5_LAND_DAILY_temperature_2m_2011-01-01_2011-12-31_-5p4765to13p9448N_0p6930to19p3454E.temperature_2m.tif"
-ndvi_path <- "cmr_data/NDVI2011/"
+path1 <- "data/cmr_data/chirps_2011/CHIRPS_PENTAD_precipitation_2011-01-01_2011-12-31_-5p8264to13p9448N_0p6930to19p1696E.precipitation.tif"
+path2 <- "data/cmr_data/ERA5_temperature/ERA5_LAND_DAILY_temperature_2m_2011-01-01_2011-12-31_-5p4765to13p9448N_0p6930to19p3454E.temperature_2m.tif"
+ndvi_path <- "data/cmr_data/NDVI2011/"
 # Load all 12 monthly NDVI tif files
 ndvi_files <- list.files(
   ndvi_path,
@@ -176,28 +243,65 @@ ndvi_files <- list.files(
   full.names = TRUE
 )
 
-cmr_pop <- rast("cmr_data/cmr_pd_2011_1km_UNadj.tif")
-cmr_rainfall_2011 <- rast(path1)
-cmr_temperature_2011 <- rast(path2)
-elevation_cmr <- rast("cmr_data/elevation/cmr_elv_msk.tif")
-cmr_land_cover_water <- rast("ben_data/landuse/WorldCover_water_30s.tif")
-cmr_land_cover_built <- rast("ben_data/landuse/WorldCover_built_30s.tif")
-cmr_land_cover_cropland <- rast("ben_data/landuse/WorldCover_cropland_30s.tif")
-cmr_land_cover_trees <- rast("ben_data/landuse/WorldCover_trees_30s.tif")
-cmr_land_cover_wetland <- rast("ben_data/landuse/WorldCover_wetland_30s.tif")
 cmr_ndvi_stack<- rast(ndvi_files)
 
 
-cmr_pop  <- project(cmr_pop,  st_crs(map_2011_cmr_sf)$wkt)
-cmr_rainfall_2011 <- project(cmr_rainfall_2011, st_crs(map_2011_cmr_sf)$wkt)
-cmr_temperature_2011 <- project(cmr_temperature_2011, st_crs(map_2011_cmr_sf)$wkt)
-cmr_ndvi_stack <- project(cmr_ndvi_stack, st_crs(map_2011_cmr_sf)$wkt)
-elevation_cmr   <- project(elevation_cmr,   st_crs(map_2011_cmr_sf)$wkt)
-cmr_land_cover_water   <- project(cmr_land_cover_water,   st_crs(map_2011_cmr_sf)$wkt)
-cmr_land_cover_built   <- project(cmr_land_cover_built,   st_crs(map_2011_cmr_sf)$wkt)
-cmr_land_cover_cropland   <- project(cmr_land_cover_cropland,   st_crs(map_2011_cmr_sf)$wkt)
-cmr_land_cover_trees   <- project(cmr_land_cover_trees,   st_crs(map_2011_cmr_sf)$wkt)
-cmr_land_cover_wetland   <- project(cmr_land_cover_wetland,   st_crs(map_2011_cmr_sf)$wkt)
+cmr_pop <- rast("data/cmr_data/cmr_pd_2011_1km_UNadj.tif")
+cmr_rainfall_2011 <- rast(path1)
+cmr_temperature_2011 <- rast(path2)
+elevation_cmr <- rast("data/cmr_data/elevation/cmr_elv_msk.tif")
+land_cover_water <- rast("data/ben_data/landuse/WorldCover_water_30s.tif")
+land_cover_trees <- rast("data/ben_data/landuse/WorldCover_trees_30s.tif")
+land_cover_builts <- rast("data/ben_data/landuse/WorldCover_built_30s.tif")
+land_cover_cropland <- rast("data/ben_data/landuse/WorldCover_cropland_30s.tif")
+land_cover_wetland <- rast("data/ben_data/landuse/WorldCover_wetland_30s.tif")
+cmr_ITN_2011  <- rast("data/ITN_2000/2025_GBD2024_Africa_ITN_2011.tif")
+cmr_ITN_2011  <- rast("data/ITN_2000_2/2026_GBD2025_Africa_ITN_Use_Rate_2011.tif")
+cmr_IRS_2011  <- rast("data/IRS_2000/2025_GBD2024_Africa_IRS_2011.tif")
+cmr_effective_treat_2011 <- rast("data/Effective_treat_2000_2025/2026_GBD2025_Global_Antimalarial_EFT_2011.tif")
+
+################################################################################
+#            Extraction of the covariates at the sampled location              #
+################################################################################
+
+cmr_pop  <- crop(cmr_pop,  cmr_vect)
+cmr_pop  <- mask(cmr_pop,  cmr_vect)
+
+cmr_rainfall_2011 <- crop(cmr_rainfall_2011, cmr_vect)
+cmr_rainfall_2011 <- mask(cmr_rainfall_2011, cmr_vect)
+
+cmr_temperature_2011 <- crop(cmr_temperature_2011, cmr_vect)
+cmr_temperature_2011 <- mask(cmr_temperature_2011, cmr_vect)
+
+cmr_ndvi_stack <- crop(cmr_ndvi_stack, cmr_vect)
+cmr_ndvi_stack <- mask(cmr_ndvi_stack, cmr_vect)
+
+elevation_cmr   <- crop(elevation_cmr, cmr_vect)
+elevation_cmr   <- mask(elevation_cmr, cmr_vect)
+
+cmr_land_cover_water     <- crop(land_cover_water, cmr_vect)
+cmr_land_cover_water     <- mask(cmr_land_cover_water, cmr_vect)
+
+cmr_land_cover_built     <- crop(land_cover_builts, cmr_vect)
+cmr_land_cover_built     <- mask(cmr_land_cover_built, cmr_vect)
+
+cmr_land_cover_cropland  <- crop(land_cover_cropland, cmr_vect)
+cmr_land_cover_cropland  <- mask(cmr_land_cover_cropland, cmr_vect)
+
+cmr_land_cover_trees     <- crop(land_cover_trees, cmr_vect)
+cmr_land_cover_trees     <- mask(cmr_land_cover_trees, cmr_vect)
+
+cmr_land_cover_wetland   <- crop(land_cover_wetland, cmr_vect)
+cmr_land_cover_wetland   <- mask(cmr_land_cover_wetland, cmr_vect)
+
+cmr_ITN_2011   <- crop(cmr_ITN_2011, cmr_vect)
+cmr_ITN_2011   <- mask(cmr_ITN_2011, cmr_vect)
+
+cmr_IRS_2011   <- crop(cmr_IRS_2011, cmr_vect)
+cmr_IRS_2011   <- mask(cmr_IRS_2011, cmr_vect)
+
+cmr_effective_treat_2011   <- crop(cmr_effective_treat_2011, cmr_vect)
+cmr_effective_treat_2011   <- mask(cmr_effective_treat_2011, cmr_vect)
 
 cmr_pop_density_2011_df <- terra::extract(cmr_pop,  map_2011_cmr_sf)
 cmr_rainfall_2011_df    <- terra::extract(cmr_rainfall_2011, map_2011_cmr_sf)
@@ -210,45 +314,35 @@ cmr_land_cover_built_df <- terra::extract(cmr_land_cover_built, map_2011_cmr_sf)
 cmr_land_cover_cropland_df <- terra::extract(cmr_land_cover_cropland, map_2011_cmr_sf)
 cmr_land_cover_trees_df <- terra::extract(cmr_land_cover_trees, map_2011_cmr_sf)
 cmr_land_cover_wetland_df <- terra::extract(cmr_land_cover_wetland, map_2011_cmr_sf)
+cmr_ITN_2011_df   <- terra::extract(cmr_ITN_2011, map_2011_cmr_sf)
+cmr_IRS_2011_df   <- terra::extract(cmr_IRS_2011, map_2011_cmr_sf)
+cmr_effective_treat_2011_df   <- terra::extract(cmr_effective_treat_2011, map_2011_cmr_sf)
 
 
 # distance to water
 
 bbox <- st_bbox(shp_cmr)
 
-rivers <- st_read("HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
+rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
                   wkt_filter = st_as_text(st_as_sfc(bbox)))
 
-lakes  <- st_read("HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+lakes  <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
                   wkt_filter = st_as_text(st_as_sfc(bbox)))
 
-rivers <- ms_simplify(rivers, keep = 0.3, keep_shapes = TRUE)
-lakes  <- ms_simplify(lakes,  keep = 0.3, keep_shapes = TRUE)
-
-rivers <- st_transform(rivers, st_crs(map_2011_cmr_sf))
-lakes  <- st_transform(lakes,  st_crs(map_2011_cmr_sf))
 
 rivers_valid <- st_make_valid(rivers)
 lakes_valid  <- st_make_valid(lakes)
 
-#water_cmr <- st_union(rivers_valid, lakes_valid)
-#dist_matrix <- st_distance(map_2011_cmr_sf, water)
-
-shp_cmr_country <- shp_cmr %>%
-  mutate(country = "CMR") %>% 
-  group_by(country) %>% 
-    summarise(geometry=st_union(geometry))
-
-rivers_cmr <- st_intersection(rivers_valid, shp_cmr_country)
-lakes_cmr  <- st_intersection(lakes_valid,  shp_cmr_country)
+rivers_valid <- ms_simplify(rivers_valid, keep = 0.3, keep_shapes = TRUE)
+lakes_valid  <- ms_simplify(lakes_valid,  keep = 0.3, keep_shapes = TRUE)
 
 
 # nearest river segment for each point
-nn_riv <- st_nn(map_2011_cmr_sf, rivers_cmr, k = 1, returnDist = TRUE)
+nn_riv <- st_nn(map_2011_cmr_sf, rivers_valid, k = 1, returnDist = TRUE)
 dist_riv_min <- sapply(nn_riv$dist, `[`, 1)
 
 # nearest lake polygon for each point
-nn_lake <- st_nn(map_2011_cmr_sf, lakes_cmr, k = 1, returnDist = TRUE)
+nn_lake <- st_nn(map_2011_cmr_sf, lakes_valid, k = 1, returnDist = TRUE)
 dist_lake_min <- sapply(nn_lake$dist, `[`, 1)
 
 
@@ -256,7 +350,6 @@ map_2011_cmr_sf$dist_to_water <- pmin(dist_riv_min, dist_lake_min)
 
 
 cmr_pf_data_2011 <- map_2011_cmr_sf %>% 
-  st_drop_geometry()%>% 
   dplyr::select(site_id, lower_age, upper_age, examined, positive, pr, species, dist_to_water) %>% 
   mutate(pop_density = cmr_pop_density_2011_df[,2],
          rainfall = cmr_rainfall_2011_df[,2],
@@ -267,44 +360,173 @@ cmr_pf_data_2011 <- map_2011_cmr_sf %>%
          landcover_trees = cmr_land_cover_trees_df[,2],
          landcover_builts = cmr_land_cover_built_df[,2],
          landcover_cropland = cmr_land_cover_cropland_df[,2],
-         landcover_wetland = cmr_land_cover_wetland_df[,2]) %>% 
+         landcover_wetland = cmr_land_cover_wetland_df[,2],
+         ITN_2011         = cmr_ITN_2011_df[,2],
+         effective_treat  = cmr_effective_treat_2011_df[,2]) %>% 
   filter(species == "P. falciparum")
 
 
-missing_rows <- which(!complete.cases(cmr_pf_data_2011))
-cmr_pf_data_2011[missing_rows, ]
+numeric_cols <- names(cmr_pf_data_2011)[sapply(cmr_pf_data_2011, is.numeric)]
 
-# find nearest neighbor for each point
-nn <- st_nn(map_2011_cmr_sf, map_2011_cmr_sf, k = 2)   # k=2 because first neighbor is itself
-
-for (var in c("pop_density", "temperature", "elevation")) {
-  missing <- is.na(cmr_pf_data_2011[[var]])
-  cmr_pf_data_2011[[var]][missing] <- cmr_pf_data_2011[[var]][ sapply(nn[missing], `[`, 2) ]
+for (col in numeric_cols) {
+  cmr_pf_data_2011 <- fill_by_nearest(cmr_pf_data_2011, col)
 }
 
-map_2011_cmr_sf <- map_2011_cmr_sf %>% 
-  mutate(pop_density = cmr_pf_data_2011$pop_density,
-         rainfall = cmr_pf_data_2011$rainfall,
-         temperature = cmr_pf_data_2011$temperature,
-         elevation = cmr_pf_data_2011$elevation,
-         vegetation_index = cmr_pf_data_2011$vegetation_index,
-         landcover_water = cmr_pf_data_2011$landcover_water,
-         landcover_trees = cmr_pf_data_2011$landcover_trees,
-         landcover_builts = cmr_pf_data_2011$landcover_builts,
-         landcover_cropland = cmr_pf_data_2011$landcover_cropland,
-         landcover_wetland = cmr_pf_data_2011$landcover_wetland) %>% 
-  filter(species == "P. falciparum")
+st_write(cmr_pf_data_2011, 
+         "data/cmr_data/benchmarking_spatial_data_cmr_sf.gpkg", append = FALSE)
+
+################################################################################
+#              build prediction grid  and covariates extract                   #
+################################################################################
+
+# resolution in meters (5000 m = 5 km)
+res <- 5000  
+
+box_cmr <- st_bbox(shp_cmr %>% st_transform(3857)) %>% st_as_sfc()
+# Create grid covering bounding box of Cameroon
+grid <- st_make_grid(
+  box_cmr,
+  cellsize = res,
+  what = "centers"
+)
+
+grid <- st_sf(geometry = grid)
+
+# Keep only grid points inside Cameroon
+grid <- st_intersection(grid, shp_cmr%>% st_transform(3857))
+
+cmr_vect <- vect(grid %>% st_transform(4326))
+
+# grid_ITN_usage_2021  <- project(ITN_intervention_2021,  st_crs(grid)$wkt)
+grid_pop  <- crop(cmr_pop,  cmr_vect)
+grid_pop  <- mask(cmr_pop,  cmr_vect)
+
+grid_rainfall_2021 <- crop(cmr_rainfall_2011, cmr_vect)
+grid_rainfall_2021 <- mask(cmr_rainfall_2011, cmr_vect)
+
+grid_temperature_2021 <- crop(cmr_temperature_2011, cmr_vect)
+grid_temperature_2021 <- mask(cmr_temperature_2011, cmr_vect)
+
+grid_ndvi_stack <- crop(cmr_ndvi_stack, cmr_vect)
+grid_ndvi_stack <- mask(cmr_ndvi_stack, cmr_vect)
+
+elevation_grid   <- crop(elevation_cmr, cmr_vect)
+elevation_grid   <- mask(elevation_cmr, cmr_vect)
+
+grid_land_cover_water   <- crop(land_cover_water, cmr_vect)
+grid_land_cover_water   <- mask(grid_land_cover_water, cmr_vect)
+
+grid_land_cover_built   <- crop(land_cover_builts, cmr_vect)
+grid_land_cover_built   <- mask(grid_land_cover_built, cmr_vect)
+
+grid_land_cover_cropland   <- crop(land_cover_cropland, cmr_vect)
+grid_land_cover_cropland   <- mask(grid_land_cover_cropland, cmr_vect)
+
+grid_land_cover_trees   <- crop(land_cover_trees, cmr_vect)
+grid_land_cover_trees   <- mask(grid_land_cover_trees, cmr_vect)
+
+grid_land_cover_wetland   <- crop(land_cover_wetland, cmr_vect)
+grid_land_cover_wetland   <- mask(grid_land_cover_wetland, cmr_vect)
+
+grid_ITN   <- crop(cmr_ITN_2011, cmr_vect)
+grid_ITN   <- mask(grid_ITN, cmr_vect)
+
+grid_IRS   <- crop(cmr_IRS_2011, cmr_vect)
+grid_IRS   <- mask(grid_IRS, cmr_vect)
+
+grid_effective_treat   <- crop(cmr_effective_treat_2011, cmr_vect)
+grid_effective_treat   <- mask(grid_effective_treat, cmr_vect)
+
+
+# grid_ITN_usage_2021_df <- terra::extract(grid_ITN_usage_2021,  grid)
+grid_pop_density_2020_df <- terra::extract(grid_pop,  cmr_vect)
+grid_rainfall_2021_df    <- terra::extract(grid_rainfall_2021, cmr_vect)
+grid_temperature_2021_df <- terra::extract(grid_temperature_2021, cmr_vect)
+ndvi_vals_grid_monthly <- terra::extract(grid_ndvi_stack, cmr_vect)
+ndvi_mean_grid <- apply(ndvi_vals_grid_monthly[,-1], 1, mean, na.rm = TRUE)
+elevation_grid_df <- terra::extract(elevation_grid, cmr_vect)
+grid_land_cover_water_df <- terra::extract(grid_land_cover_water, cmr_vect)
+grid_land_cover_built_df <- terra::extract(grid_land_cover_built, cmr_vect)
+grid_land_cover_cropland_df <- terra::extract(grid_land_cover_cropland, cmr_vect)
+grid_land_cover_trees_df <- terra::extract(grid_land_cover_trees, cmr_vect)
+grid_land_cover_wetland_df <- terra::extract(grid_land_cover_wetland, cmr_vect)
+grid_ITN_df                <- terra::extract(grid_ITN, cmr_vect)
+grid_effective_treat_df    <- terra::extract(grid_effective_treat, cmr_vect)
+
+
+# nearest river segment for each point
+
+bbox <- st_bbox(grid %>% st_transform(4326))
+
+rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
+                  wkt_filter = st_as_text(st_as_sfc(bbox)))
+
+lakes  <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+                  wkt_filter = st_as_text(st_as_sfc(bbox)))
+
+
+rivers_valid <- st_make_valid(rivers)
+lakes_valid  <- st_make_valid(lakes)
+
+rivers_valid <- ms_simplify(rivers_valid, keep = 0.3, keep_shapes = TRUE)
+lakes_valid  <- ms_simplify(lakes_valid,  keep = 0.3, keep_shapes = TRUE)
+
+rivers_valid <- rivers_valid %>%  st_transform(3857)
+lakes_valid <- lakes_valid %>% st_transform(3857)
+
+nn_riv <- st_nn(grid, rivers_valid, k = 1, returnDist = TRUE)
+dist_riv_min <- sapply(nn_riv$dist, `[`, 1)
+
+# nearest lake polygon for each point
+nn_lake <- st_nn(grid, lakes_valid, k = 1, returnDist = TRUE)
+dist_lake_min <- sapply(nn_lake$dist, `[`, 1)
+
+
+grid$dist_to_water <- pmin(dist_riv_min, dist_lake_min)
+
+grid <- grid %>% 
+  mutate(rainfall            = grid_rainfall_2021_df[,2],
+         temperature         = grid_temperature_2021_df[,2],
+         pop_density         = grid_pop_density_2020_df[,2],
+         elevation           = elevation_grid_df[,2],
+         vegetation_index    = ndvi_mean_grid,
+         landcover_cropland  = grid_land_cover_cropland_df[,2],
+         landcover_water     = grid_land_cover_water_df[,2],
+         landcover_wetland   = grid_land_cover_wetland_df[,2],
+         landcover_builts    = grid_land_cover_built_df[,2],
+         landcover_trees     = grid_land_cover_trees_df[,2],
+         ITN_2011            = grid_ITN_df[,2],
+         effective_treat     = grid_effective_treat_df[,2]) 
+
+numeric_cols <- names(grid)[sapply(grid, is.numeric)]
+
+for (col in numeric_cols) {
+  grid <- fill_by_nearest(grid, col)
+}
+
+st_write(grid, "data/cmr_data/cmr_map_grid.gpkg", append = FALSE)
+
+
+
+
 
 ```
 
 # Check for multicollinearity
 
 ```{r}
+cmr_pf_data_2011 <- st_read("data/cmr_data/benchmarking_spatial_data_cmr_sf.gpkg")
+grid <- st_read("data/cmr_data/cmr_map_grid.gpkg")
+```
+
+
+```{r}
 num_vars <- cmr_pf_data_2011 %>% 
+  st_drop_geometry() %>% 
   dplyr::select(c(
-  "rainfall", "temperature", "elevation", "vegetation_index",
-  "pop_density", "dist_to_water", "landcover_water", "landcover_trees",
-  "landcover_builts", "landcover_cropland", "landcover_wetland"))
+  "rainfall", "temperature", "elevation", "vegetation_index", "pop_density", 
+  "dist_to_water", "landcover_water", "landcover_trees", "landcover_builts", 
+  "landcover_cropland", "landcover_wetland", "ITN_2011", "effective_treat"))
 
 M <- cor(num_vars, use = "pairwise.complete.obs")
 
@@ -321,7 +543,7 @@ corrplot(
 fit <- lm(
   positive / examined ~ rainfall + temperature + elevation +
     vegetation_index + pop_density + dist_to_water + landcover_water + landcover_trees +
-  landcover_builts + landcover_cropland + landcover_wetland,
+  landcover_builts + landcover_cropland + landcover_wetland + ITN_2011 + effective_treat,
   data = cmr_pf_data_2011
 )
 
@@ -329,7 +551,7 @@ vif(fit)
 
 fit1 <- lm(
   positive / examined ~ rainfall + temperature + pop_density + dist_to_water + landcover_water + landcover_trees +
-  landcover_builts + landcover_cropland + landcover_wetland,
+  landcover_builts + landcover_cropland + landcover_wetland + ITN_2011 + effective_treat + vegetation_index,
   data = cmr_pf_data_2011
 )
 
@@ -341,24 +563,25 @@ We can see that elevation and temperature are highly correlated r = 0.8. So in t
 # Autocorrelation check
 ```{r}
 # create neighbors based on k nearest neighbors (e.g. k = 4)
-coords <- st_coordinates(map_2011_cmr_sf)
+coords <- st_coordinates(cmr_pf_data_2011)
 nb <- knn2nb(knearneigh(coords, k = 4))
 lw <- nb2listw(nb, style = "W")
 
 # Moran's I on prevalence
-moran.test(map_2011_cmr_sf$pr, lw)
+moran.test(cmr_pf_data_2011$pr, lw)
 ```
+- Our malaria prevalence data is strongly spatially clustered a spatial model is absolutely required.
 
 # Variogram
 ```{r}
-map_2011_cmr_sf_sp <- as(map_2011_cmr_sf, "Spatial")
+map_2011_cmr_sf_sp <- cmr_pf_data_2011 %>% st_transform(3857)
 
 vgm_emp <- variogram(pr ~ 1, data = map_2011_cmr_sf_sp)   # prevalence vs distance
 plot(vgm_emp)
 
 vgm_mod <- fit.variogram(
   vgm_emp,
-  model = vgm("Mat", nugget = 0.025, psill = 0.55, range = 100, kappa = 0.55)
+  model = vgm("Mat", nugget = 0.025, psill = 0.05, range = 100000, kappa = 0.55)
 )
 vgm_mod
 
@@ -367,19 +590,15 @@ plot(vgm_emp, vgm_mod)
 
 ```{r}
 
-crs_proj <- 32633  
+pts      <- st_transform(cmr_pf_data_2011, 3857)
+shp_cmr_m  <- st_transform(shp_cmr, 3857)
 
-pts      <- st_transform(map_2011_cmr_sf, crs_proj)
-country  <- st_transform(shp_cmr_country, crs_proj)
 
-pts_sp     <- as(pts, "Spatial")
-country_sp <- as(country, "Spatial")
-
-mesh <- inla.mesh.2d(
-  loc      = coordinates(pts_sp),
-  boundary = inla.sp2segment(country_sp),
+mesh <- fmesher::fm_mesh_2d_inla(
+  loc      = st_coordinates(pts),
+  boundary = fm_as_segm(shp_cmr_m),
   max.edge = c(50e3, 200e3),   # 50 km near data, 200 km outer
-  cutoff   = 10e3,             # min distance between points (10 km)
+  cutoff   = 15e3,             # min distance between points (15 km)
   offset   = c(50e3, 150e3)    # extend mesh 50–150 km beyond country
 )
 
@@ -401,7 +620,7 @@ mesh_sf <- st_sf(
 
 ggplot() +
   geom_sf(data = mesh_sf, fill = NA, color = "grey70", size = 0.2) +
-  geom_sf(data = country, fill = NA, color = "black", size = 0.4) +
+  geom_sf(data = shp_cmr, fill = NA, color = "black", size = 0.4) +
   geom_sf(data = pts, color = "red", size = 2) +
   theme_minimal() +
   labs(title = "INLA Mesh over Country Boundary")
@@ -412,27 +631,33 @@ ggplot() +
 spde <- inla.spde2.pcmatern(
   mesh = mesh,
   alpha = 2,
-  prior.range = c(120e3, 0.5),  # P(range < 120 km) = 0.5
+  prior.range = c(90e3, 0.5),    # P(range < 120 km) = 0.5
   prior.sigma = c(0.22, 0.5)      # weakly informative
 )
 
-A_est <- inla.spde.make.A(mesh, loc = coordinates(pts_sp))
+A_est <- inla.spde.make.A(mesh, loc = st_coordinates(pts))
 
-pts <- pts %>% mutate(
-  rainfall = as.numeric(scale(rainfall)),
-  temperature = as.numeric(scale(temperature)),
-  dist_to_water = as.numeric(scale(dist_to_water)),
-  pop_density = as.numeric(scale(pop_density)),
-  vegetation_index = as.numeric(scale(vegetation_index)),
-  elevation        = as.numeric(scale(elevation))
-)
 
-# pts$rainfall <- scale(pts$rainfall)
-# pts$pop_density <- scale(pts$pop_density)
-# pts$dist_to_water <- scale(pts$dist_to_water)
-# pts$temperature <- scale(pts$temperature)
-# pts$vegetation_index <- scale(pts$vegetation_index)
-# pts$elevation <- scale(pts$elevation)
+#1. Variables to be scale
+vars_to_scale <- c("rainfall", "temperature", "pop_density", 
+                   "dist_to_water", "elevation")
+
+# 2. Create a named list to store the training parameters (Means and SDs)
+scaling_stats <- list()
+
+# 3. Scale the observed data and extract the parameters
+for (var in vars_to_scale) {
+  # Calculate mean and standard deviation from the 36 observed points
+  mean_val <- mean(pts[[var]], na.rm = TRUE)
+  sd_val   <- sd(pts[[var]], na.rm = TRUE)
+  
+  # Store them for later use on the grid
+  scaling_stats[[var]] <- c(mean = mean_val, sd = sd_val)
+  
+  # Apply the scaling to the observed data
+  pts[[var]] <- (pts[[var]] - mean_val) / sd_val
+}
+
 
 
 stk_est <- inla.stack(
@@ -459,6 +684,33 @@ stk_est <- inla.stack(
   tag = "est"
 )
 
+
+stk_est_intervention <- inla.stack(
+  data = list(
+    y       = pts$positive,
+    Ntrials = pts$examined
+  ),
+  A = list(A_est, 1),
+  effects = list(
+    spatial = 1:spde$n.spde,
+    data.frame(
+    intercept        = 1,
+    rainfall         = pts$rainfall,
+    temperature      = pts$temperature,
+    pop_density      = pts$pop_density,
+    dist_to_water    = pts$dist_to_water,
+    lc_water         = pts$landcover_water,
+    lc_trees         = pts$landcover_trees,
+    lc_built         = pts$landcover_builts,
+    lc_wetland       = pts$landcover_wetland,
+    lc_cropland      = pts$landcover_cropland,
+    ITN              = pts$ITN_2011,
+    effective_treat  = pts$effective_treat
+    )
+  ),
+  tag = "est"
+)
+
 ```
 
 # Build the model
@@ -475,6 +727,21 @@ formula <- y ~ -1 + intercept +
   lc_wetland +
   lc_built +
   lc_trees  +
+  f(spatial, model = spde)
+
+
+formula_intervention <- y ~ -1 + intercept +
+  rainfall +
+  temperature +
+  pop_density +
+  dist_to_water +
+  lc_water +
+  lc_cropland+
+  lc_wetland +
+  lc_built +
+  lc_trees  +
+  ITN +
+  effective_treat+
   f(spatial, model = spde)
 
 
@@ -498,6 +765,27 @@ res <- inla(
   )
 )
 
+
+res_intervention <- inla(
+  formula_intervention,
+  family = "binomial",
+  Ntrials = Ntrials,
+  data = inla.stack.data(stk_est_intervention),
+  control.predictor = list(
+    A = inla.stack.A(stk_est_intervention),
+    compute = TRUE
+  ),
+  control.fixed = list(
+    mean = 0,
+    prec = 1
+  ),
+  control.compute = list(
+    dic = TRUE,
+    waic = TRUE,
+    cpo = TRUE
+  )
+)
+
 res$summary.fixed
 
 res$summary.hyperpar
@@ -506,141 +794,87 @@ res$summary.hyperpar
 res$dic$dic
 res$waic$waic
 
-spatial_field <- res$summary.random$spatial
-head(spatial_field)
-
+res_intervention$summary.fixed
+res_intervention$summary.hyperpar
 ```
 
+#checking for overdispersion
 ```{r}
 idx_est <- inla.stack.index(stk_est, "est")$data
 
 fitted_est <- res$summary.fitted.values[idx_est, "mean"]
 
-cbind(
-  observed = pts$positive / pts$examined,
-  fitted   = fitted_est
-)[1:30, ]
+y <- pts$positive
+n <- pts$examined
+
+pearson_res <- (y - n * fitted_est) / sqrt(n * fitted_est * (1 - fitted_est))
+
+n_obs <- length(y)
+p_eff <- res$dic$p.eff   # effective number of parameters
+
+phi <- sum(pearson_res^2) / (n_obs - p_eff)
+phi
+
 ```
 
+# Model diagnostic
+```{r}
+hist(res_intervention$cpo$pit,
+     breaks = 20,
+     main = "PIT Histogram",
+     xlab = "PIT")
+
+idx_est <- inla.stack.index(stk_est_intervention, "est")$data
+
+fitted_est <- res_intervention$summary.fitted.values[idx_est, "mean"]
+
+df_resid <- as.data.frame(cbind(
+  observed = pts$positive / pts$examined,
+  fitted   = fitted_est
+))
+
+pts$resid <- (df_resid$observed - df_resid$fitted) / sqrt(df_resid$fitted * (1 - df_resid$fitted) / pts$examined)
+
+coords <- st_coordinates(pts)
+
+nb <- dnearneigh(coords, d1 = 0, d2 = 28000)   # 100 km neighbours
+lw <- nb2listw(nb, style = "W", zero.policy = TRUE)
+
+moran.test(pts$resid,
+           lw,
+           alternative = "two.sided",
+           zero.policy = TRUE)
+
+
+plot(df_resid$observed, df_resid$fitted,
+       xlab = "Observed prevalence",
+       ylab = "Fitted prevalence")
+abline(0, 1, col = "red")
+
+```
+
+The beta‑binomial SPDE model shows strong but short‑range spatial dependence (posterior range ~ 28 km, σ ~ 1.23). The PIT histogram indicates mild right‑skew, reflecting slight underestimation of very high observed prevalences, but overall calibration is acceptable. Residual Moran’s I is significantly negative (I ≈ –0.07, p ≈ 0.02), consistent with localized over‑ and under‑prediction patterns produced by the short spatial range. Compared to the binomial model, the beta‑binomial likelihood reduces residual spatial autocorrelation and improves PIT calibration. Overall, the model fits well, with only minor miscalibration in the upper tail.
 
 # Build grid for prediction and the prediction model
 
 ```{r}
-# resolution in meters (5000 m = 5 km)
-res <- 5000  
-
-# Create grid covering bounding box of Cameroon
-grid <- st_make_grid(
-  country,
-  cellsize = res,
-  what = "centers"
-)
-
-grid <- st_sf(geometry = grid)
-
-# Keep only grid points inside Cameroon
-grid <- st_intersection(grid, country)
-
-
-# grid_ITN_usage_2021  <- project(ITN_intervention_2021,  st_crs(grid)$wkt)
-grid_pop  <- project(cmr_pop,  st_crs(grid)$wkt)
-grid_rainfall_2021 <- project(cmr_rainfall_2011, st_crs(grid)$wkt)
-grid_temperature_2021 <- project(cmr_temperature_2011, st_crs(grid)$wkt)
-grid_ndvi_stack <- project(cmr_ndvi_stack, st_crs(grid)$wkt)
-elevation_grid   <- project(elevation_cmr,   st_crs(grid)$wkt)
-grid_land_cover_water   <- project(cmr_land_cover_water,   st_crs(grid)$wkt)
-grid_land_cover_built   <- project(cmr_land_cover_built,   st_crs(grid)$wkt)
-grid_land_cover_cropland   <- project(cmr_land_cover_cropland,   st_crs(grid)$wkt)
-grid_land_cover_trees   <- project(cmr_land_cover_trees,   st_crs(grid)$wkt)
-grid_land_cover_wetland   <- project(cmr_land_cover_wetland,   st_crs(grid)$wkt)
-
-
-
-# grid_ITN_usage_2021_df <- terra::extract(grid_ITN_usage_2021,  grid)
-grid_pop_density_2020_df <- terra::extract(grid_pop,  grid)
-grid_rainfall_2021_df    <- terra::extract(grid_rainfall_2021, grid)
-grid_temperature_2021_df <- terra::extract(grid_temperature_2021, grid)
-ndvi_vals_grid_monthly <- terra::extract(grid_ndvi_stack, grid)
-ndvi_mean_grid <- apply(ndvi_vals_grid_monthly[,-1], 1, mean, na.rm = TRUE)
-elevation_grid_df <- terra::extract(elevation_grid, grid)
-grid_land_cover_water_df <- terra::extract(grid_land_cover_water, grid)
-grid_land_cover_built_df <- terra::extract(grid_land_cover_built, grid)
-grid_land_cover_cropland_df <- terra::extract(grid_land_cover_cropland, grid)
-grid_land_cover_trees_df <- terra::extract(grid_land_cover_trees, grid)
-grid_land_cover_wetland_df <- terra::extract(grid_land_cover_wetland, grid)
-
-
-# nearest river segment for each point
-rivers_cmr <- rivers_cmr %>%  st_transform(crs = st_crs(grid))
-lakes_cmr <- lakes_cmr %>% st_transform(crs = st_crs(grid))
-
-nn_riv <- st_nn(grid, rivers_cmr, k = 1, returnDist = TRUE)
-dist_riv_min <- sapply(nn_riv$dist, `[`, 1)
-
-# nearest lake polygon for each point
-nn_lake <- st_nn(grid, lakes_cmr, k = 1, returnDist = TRUE)
-dist_lake_min <- sapply(nn_lake$dist, `[`, 1)
-
-
-grid$dist_to_water <- pmin(dist_riv_min, dist_lake_min)
-
-grid <- grid %>% 
-  mutate(annual_rainfall_2021    = grid_rainfall_2021_df[,2],
-         annual_temperature_2021 = grid_temperature_2021_df[,2],
-         pop_density_2020        = grid_pop_density_2020_df[,2],
-         elevation               = elevation_grid_df[,2],
-         vegetation_index        = ndvi_mean_grid,
-         lc_cropland             = grid_land_cover_cropland_df[,2],
-         lc_water                = grid_land_cover_water_df[,2],
-         lc_wetland              = grid_land_cover_wetland_df[,2],
-         lc_built                = grid_land_cover_built_df[,2],
-         lc_trees                = grid_land_cover_trees_df[,2]) 
-
-grid_df <- grid %>% 
-  st_drop_geometry()
-
-missing_rows <- which(!complete.cases(grid_df))
-grid_df[missing_rows, ]
-
-# find nearest neighbor for each point
-nn <- st_nn(grid, grid, k = 50)   # k=2 because first neighbor is itself
-
-nn2 <- vapply(nn, function(x) x[2], integer(1))
-
-
-for (var in c("pop_density_2020", "annual_temperature_2021", "elevation", "vegetation_index")) {
-  missing <- is.na(grid_df[[var]])
-  grid_df[[var]][missing] <- grid_df[[var]][ nn2[missing] ]
-}
-
-grid <- grid %>% 
-  mutate(annual_rainfall_2021    = grid_df$annual_rainfall_2021,
-         annual_temperature_2021 = grid_df$annual_temperature_2021,
-         pop_density_2020        = grid_df$pop_density_2020,
-         elevation               = grid_df$elevation,
-         vegetation_index        = grid_df$vegetation_index,
-         lc_cropland             = grid_df$lc_cropland,
-         lc_water                = grid_df$lc_water,
-         lc_wetland              = grid_df$lc_wetland,
-         lc_built                = grid_df$lc_built,
-         lc_trees                = grid_df$lc_trees) 
-
-grid <- grid %>% 
-  mutate(annual_rainfall_2021    = as.numeric(scale(annual_rainfall_2021)),
-         annual_temperature_2021 = as.numeric(scale(annual_temperature_2021)),
-         pop_density_2020        = as.numeric(scale(pop_density_2020)),
-         dist_to_water           = as.numeric(scale(dist_to_water)),
-         elevation               = as.numeric(scale(elevation)),
-         vegetation_index        = as.numeric(scale(vegetation_index)))
-
-st_write(grid, "cmr_data/cmr_map_grid.gpkg", append = FALSE)
-
-
 # Build the A‑matrix for prediction locations
 A_pred <- inla.spde.make.A(
   mesh = mesh,
   loc = st_coordinates(grid)
 )
+
+
+# Scale the prediction grid using the EXACT same parameters as in the fitting model
+# (This ensures a grid cell is measured relative to our 36 observed points)
+for (var in vars_to_scale) {
+  mean_val <- scaling_stats[[var]]["mean"]
+  sd_val   <- scaling_stats[[var]]["sd"]
+  
+  grid[[var]] <- (grid[[var]] - mean_val) / sd_val
+}
+
+
 
 #Build the prediction stack
 
@@ -651,15 +885,39 @@ stk_pred <- inla.stack(
     spatial = 1:spde$n.spde,
     data.frame(
       intercept        = 1,
-      rainfall         = grid$annual_rainfall_2021,
-      temperature      = grid$annual_temperature_2021,
-      pop_density      = grid$pop_density_2020,
+      rainfall         = grid$rainfall,
+      temperature      = grid$temperature,
+      pop_density      = grid$pop_density,
       dist_to_water    = grid$dist_to_water,
-      lc_cropland      = grid$lc_cropland,
-      lc_water         = grid$lc_water,
-      lc_wetland       = grid$lc_wetland,
-      lc_built         = grid$lc_built,
-      lc_trees         = grid$lc_trees
+      lc_cropland      = grid$landcover_cropland,
+      lc_water         = grid$landcover_water,
+      lc_wetland       = grid$landcover_wetland,
+      lc_built         = grid$landcover_builts,
+      lc_trees         = grid$landcover_trees
+    )
+  ),
+  tag = "pred"
+)
+
+
+stk_pred_intervention <- inla.stack(
+  data = list(y = NA, Ntrials = NA),
+  A    = list(A_pred, 1),
+  effects = list(
+    spatial = 1:spde$n.spde,
+    data.frame(
+      intercept        = 1,
+      rainfall         = grid$rainfall,
+      temperature      = grid$temperature,
+      pop_density      = grid$pop_density,
+      dist_to_water    = grid$dist_to_water,
+      lc_cropland      = grid$landcover_cropland,
+      lc_water         = grid$landcover_water,
+      lc_wetland       = grid$landcover_wetland,
+      lc_built         = grid$landcover_builts,
+      lc_trees         = grid$landcover_trees,
+      ITN              = grid$ITN_2011,
+      effective_treat  = grid$effective_treat
     )
   ),
   tag = "pred"
@@ -669,11 +927,13 @@ stk_pred <- inla.stack(
 # Combine estimation + prediction stacks
 stk_full <- inla.stack(stk_est, stk_pred)
 
+stk_full_intervention <- inla.stack(stk_est_intervention, stk_pred)
+
 
 # Fit the model again with the full stack
 res_pred <- inla(
   formula,
-  family = "binomial",
+  family = "betabinomial",
   Ntrials = Ntrials,
   data = inla.stack.data(stk_full),
   control.predictor = list(
@@ -681,134 +941,273 @@ res_pred <- inla(
     compute = TRUE,
     link = 1
   ),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE)
 )
 
 
-# Extract predictions for the grid
-index_pred <- inla.stack.index(stk_full, "pred")$data
+res_pred_intervention <- inla(
+  formula,
+  family = "betabinomial",
+  Ntrials = Ntrials,
+  data = inla.stack.data(stk_full_intervention),
+  control.predictor = list(
+    A = inla.stack.A(stk_full_intervention),
+    compute = TRUE,
+    link = 1
+  ),
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE)
+)
 
-grid$pred_mean <- res_pred$summary.fitted.values[index_pred, "mean"]
-grid$pred_sd   <- res_pred$summary.fitted.values[index_pred, "sd"]
-grid$pred_q025 <- res_pred$summary.fitted.values[index_pred, "0.025quant"]
-grid$pred_q975 <- res_pred$summary.fitted.values[index_pred, "0.975quant"]
 
-shp_cmr1 <-  st_transform(shp_cmr, st_crs(grid))
+set.seed(123)
+samples <- inla.posterior.sample(100, res_pred_intervention)
 
-grid_cmr1 <- st_join(grid, shp_cmr1, join = st_intersects)
+idx_pred <- inla.stack.index(stk_full_intervention, tag = "pred")$data
 
-cmr_data_pev <- grid_cmr1 %>%
-  group_by(Admin2) %>%
-  summarise(
-    prev_mean   = mean(pred_mean, na.rm = TRUE),
-    prev_q025   = mean(pred_q025, na.rm = TRUE),
-    prev_q975   = mean(pred_q975, na.rm = TRUE),
-    CI_width    = mean(pred_q975 - pred_q025, na.rm = TRUE))
+pred_mat <- sapply(samples, function(s) {
+  lp <- s$latent[idx_pred]                   # linear predictor for grid cells
+  plogis(lp)                                 # convert logit  prevalence
+})
 
-cmr_data_pev_map <- shp_cmr %>%
-  left_join(cmr_data_pev %>% st_drop_geometry(), by = "Admin2")
 
-cmr_prev_1 <- ggplot(cmr_data_pev_map) +
-  geom_sf(aes(fill = prev_mean), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Estimated Prevalence")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
+grid$prev_mean   <- rowMeans(pred_mat)
+grid$prev_sd     <- apply(pred_mat, 1, sd)
+grid$prev_q025   <- apply(pred_mat, 1, quantile, 0.025)
+grid$prev_q975   <- apply(pred_mat, 1, quantile, 0.975)
 
-ggsave("cmr_data/MAP_pr_modeled/2011_cmr_pr_test_pf_all_age.png",
+
+v <- vect(grid)
+
+template <- rast(
+  ext = ext(v),
+  resolution = 5000,
+  crs = crs(v)
+)
+
+
+grid_rast <- rasterize(
+  v,
+  template,
+  field = c("prev_mean", "prev_q025", "prev_q975")
+)
+
+
+cmr_prev_1 <- ggplot(shp_cmr) +
+  geom_spatraster(data = grid_rast,
+                  mapping = aes(fill = prev_mean))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "annual prevalence of P. f")+
+  theme_void()+
+  labs(title = "annual prevalence of P. f in 2011 with intervention")
+
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_test_pf_all_age_with_intervention.pdf",
        plot = cmr_prev_1, width = 6, height = 4, dpi = 300)
 
-```
+pfpr_2011_cmr <- rast("data/cmr_data/MAP_modelled_prevalence/202608_Global_Pf_Parasite_Rate_CMR_2011.tiff") 
+
+names(pfpr_2011_cmr) <- c("Prev_mean", " ", "lci", "uci")
+
+cmr_prev_2 <- ggplot(shp_cmr) +
+  geom_spatraster(data = pfpr_2011_cmr,
+                  mapping = aes(fill = Prev_mean))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "annual prevalence of P. f (2-10years)")+
+  theme_void()+
+  labs(title = "annual prevalence of P. f (2-10years) in 2011")
+
+ggsave("Outputs/cmr_output/MAP_pr_modeled/2011_cmr_pr_map_pf_2_10.png",
+       plot = cmr_prev_2, width = 6, height = 4, dpi = 300)
 
 
-```{r}
-# Load the modeled prevalence from MAP
+cmr_vect <- vect(shp_cmr)
 
-africa_pf_pr_2_10 <- rast("prevalence_2000/2025_GBD2024_Global_PfPR_2011.tif")
+prev_dat_cmr_2011 <- terra::extract(pfpr_2011_cmr, cmr_vect)
 
-# Cameroon case
+prev_dat_cmr_2011_test <- terra::extract(grid_rast, vect(shp_cmr))
 
-cmr_bbox <- ext(shp_cmr)
+prev_summary <- prev_dat_cmr_2011 %>%
+  group_by(ID) %>%
+  summarise(
+    PfPR_2_10   = mean(Prev_mean, na.rm = TRUE),
+    PfPR_2_10_l = mean(lci, na.rm = TRUE),
+    PfPR_2_10_u = mean(uci, na.rm = TRUE)
+  )
 
-africa_pf_pr_2_10_cmr <- crop(africa_pf_pr_2_10, cmr_bbox)
+prev_summary_test <- prev_dat_cmr_2011_test %>%
+  group_by(ID) %>%
+  summarise(
+    PfPR_mean   = mean(prev_mean, na.rm = TRUE),
+    PfPR_l      = mean(prev_q025, na.rm = TRUE),
+    PfPR_u      = mean(prev_q975, na.rm = TRUE)
+  )
 
-cmr_pr_raster_map_2011 <- project(
-  africa_pf_pr_2_10_cmr,
-  st_crs(shp_cmr)$wkt
+prev_dat_cmr_2011_sf <- shp_cmr %>% 
+  mutate(PfPR_2_10   =  prev_summary$PfPR_2_10,
+         PfPR_2_10_l = prev_summary$PfPR_2_10_l,
+         PfPR_2_10_u = prev_summary$PfPR_2_10_u)
+
+prev_dat_cmr_2011_sf_test <- shp_cmr %>% 
+  mutate(PfPR_mean   =  prev_summary_test$PfPR_mean,
+         PfPR_l      = prev_summary_test$PfPR_l,
+         PfPR_u      = prev_summary_test$PfPR_u)
+
+
+# Convertion of the prevalence to all age group
+
+n <- nrow(prev_dat_cmr_2011_sf)
+
+prev_dat_cmr_2011_sf$PR_all_age <- mapply(
+  convertPrevalence,
+  prev         = prev_dat_cmr_2011_sf$PfPR_2_10,
+  age_min_in   = rep(2, n),
+  age_max_in   = rep(10, n),
+  age_min_out  = rep(0, n),
+  age_max_out  = rep(100, n),
+  parameters   = "Pf_Smith2007"
 )
 
-cmr_admin2_pr <- terra::extract(
-  cmr_pr_raster_map_2011,
-  shp_cmr,
-  fun = mean,
-  exact = FALSE
+prev_dat_cmr_2011_sf$PR_all_age_U <- mapply(
+  convertPrevalence,
+  prev         = prev_dat_cmr_2011_sf$PfPR_2_10_u,
+  age_min_in   = rep(2, n),
+  age_max_in   = rep(10, n),
+  age_min_out  = rep(0, n),
+  age_max_out  = rep(99, n),
+  parameters   = "Pf_Smith2007")
+
+prev_dat_cmr_2011_sf$PR_all_age_L <- mapply(
+  convertPrevalence,
+  prev         = prev_dat_cmr_2011_sf$PfPR_2_10_l,
+  age_min_in   = rep(2, n),
+  age_max_in   = rep(10, n),
+  age_min_out  = rep(0, n),
+  age_max_out  = rep(99, n),
+  parameters   = "Pf_Smith2007")
+
+
+breaks_prev <- c(0, 0.1, 0.2, 0.4, 0.5, 0.6, 0.8, 1)
+labels_prev <- c(
+  "0–10%", "10–20%", "20–40%", "40–50%",
+  "50–60%", "60–80%", "80–100%"
 )
 
-cmr_map_pr_pf_2_10 <- shp_cmr %>% 
-  mutate(pr_pf_2_10 = cmr_admin2_pr[,2],
-         pr_pf_2_10_L = cmr_admin2_pr[,4],
-         pr_pf_2_10_U = cmr_admin2_pr[,5],
-         CI_width = pr_pf_2_10_U - pr_pf_2_10_L)
-
-cmr_map_pr_pf_2_10$PR_all_age <- mapply(
-  convertPrevalence,
-  prev         = cmr_map_pr_pf_2_10$pr_pf_2_10,
-  age_min_in   = rep(2, nrow(cmr_map_pr_pf_2_10)),
-  age_max_in   = rep(10, nrow(cmr_map_pr_pf_2_10)),
-  age_min_out  = rep(0, nrow(cmr_map_pr_pf_2_10)),
-  age_max_out  = rep(99, nrow(cmr_map_pr_pf_2_10)),
-  parameters   = "Pf_Smith2007")
-
-cmr_map_pr_pf_2_10$PR_all_age_U <- mapply(
-  convertPrevalence,
-  prev         = cmr_map_pr_pf_2_10$pr_pf_2_10_U,
-  age_min_in   = rep(2, nrow(cmr_map_pr_pf_2_10)),
-  age_max_in   = rep(10, nrow(cmr_map_pr_pf_2_10)),
-  age_min_out  = rep(0, nrow(cmr_map_pr_pf_2_10)),
-  age_max_out  = rep(99, nrow(cmr_map_pr_pf_2_10)),
-  parameters   = "Pf_Smith2007")
-
-cmr_map_pr_pf_2_10$PR_all_age_L <- mapply(
-  convertPrevalence,
-  prev         = cmr_map_pr_pf_2_10$pr_pf_2_10_L,
-  age_min_in   = rep(2, nrow(cmr_map_pr_pf_2_10)),
-  age_max_in   = rep(10, nrow(cmr_map_pr_pf_2_10)),
-  age_min_out  = rep(0, nrow(cmr_map_pr_pf_2_10)),
-  age_max_out  = rep(99, nrow(cmr_map_pr_pf_2_10)),
-  parameters   = "Pf_Smith2007")
+colors_prev <- rev(brewer.pal(7, "RdYlGn"))
 
 
 
+cmr_prev_3 <- ggplot(prev_dat_cmr_2011_sf) +
+  geom_sf(aes(fill = cut(
+    PR_all_age,
+    breaks = breaks_prev,
+    labels = labels_prev,
+    include.lowest = TRUE
+  )), color = NA) +
+  scale_fill_manual(
+    values = colors_prev,
+    name = "Estimated prevalence"
+  ) +
+  labs(title = "Estimated P. falciparum in prevalence\n in 2011 from MAP") +
+  theme_void()+
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 15),
+    legend.title = element_text(size = 15)
+  )
 
-cmr_prev_pf_MAP_estimates <- ggplot(cmr_map_pr_pf_2_10) +
-  geom_sf(aes(fill = PR_all_age), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence of Pf (2-10)")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
+ggsave("Outputs/cmr_output/MAP_pr_modeled/2011_cmr_pr_map_pf_all_age_admin2.png",
+       plot = cmr_prev_3, width = 6, height = 4, dpi = 300)
 
-ggsave("cmr_data/MAP_pr_modeled/2011_cmr_pr_MAP_pf_all_age.pdf",
-       plot = cmr_prev_pf_MAP_estimates, width = 6, height = 4, dpi = 300)
 
-cmr_prev_pf_MAP_estimates_uncertainty <- ggplot(cmr_map_pr_pf_2_10) +
-  geom_sf(aes(fill = CI_width), color = NA) +
-  scale_fill_viridis_c(option = "magma") +
-  labs(title = "Prevalence estimates uncertainty of P.f (2-10)")+
-  theme_bw(base_size = 15)+
-  theme(axis.text.x = element_text)+
-  theme(axis.text.x = element_blank(),
-        axis.text.y = element_blank())
 
-ggsave("cmr_data/MAP_pr_modeled/cmr_pr_uncertainty_MAP_pf_2_10.png",
-       plot = cmr_prev_pf_MAP_estimates_uncertainty, width = 6, height = 4, dpi = 300)
+cmr_prev_4 <- ggplot(prev_dat_cmr_2011_sf_test) +
+  geom_sf(aes(fill = cut(
+    PfPR_mean,
+    breaks = breaks_prev,
+    labels = labels_prev,
+    include.lowest = TRUE
+  )), color = NA) +
+  scale_fill_manual(
+    values = colors_prev,
+    name = "Estimated prevalence"
+  ) +
+  labs(title = "Estimated P. falciparum in prevalence\n in 2011 usind our model (interventions included)") +
+  theme_void()+
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 15),
+    legend.title = element_text(size = 15)
+  )
 
+
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_pf_all_age_admin2_with_intervention.png",
+       plot = cmr_prev_4, width = 6, height = 4, dpi = 300)
+
+prev_dat_cmr_2011_sf_test$PfPR_map <- prev_dat_cmr_2011_sf$PR_all_age
+prev_dat_cmr_2011_sf_test$PfPR_map_u <- prev_dat_cmr_2011_sf$PR_all_age_U
+prev_dat_cmr_2011_sf_test$PfPR_map_l <- prev_dat_cmr_2011_sf$PR_all_age_L
+
+prev_dat_cmr_2011_sf_test <- prev_dat_cmr_2011_sf_test %>% 
+  mutate(diff_PfPR = PfPR_mean - PfPR_map)
+
+breaks_prev_diff <- c(-0.15, -0.05, 0.05, 0.1, 0.15, 0.2, 0.25, 30)
+labels_prev_diff <- c(
+  "-0.15%<-0.05%", "-0.05%<0.05%", "0.05%<0.10%", "0.10%<0.15%",
+  "0.15%<0.20%", "0.20%<0.25%", "0.25<0.30%"
+)
+
+colors_prev_diff <- rev(brewer.pal(7, "RdYlGn"))
+
+cmr_prev_5 <- ggplot(prev_dat_cmr_2011_sf_test) +
+  geom_sf(aes(fill = cut(
+    diff_PfPR,
+    breaks = breaks_prev_diff,
+    labels = labels_prev_diff,
+    include.lowest = TRUE
+  )), color = NA) +
+  scale_fill_manual(
+    values = colors_prev_diff,
+    name = "Difference in prevalence"
+  ) +
+  labs(title = "Difference in prevalence with intervention (2011)") +
+  theme_void()+
+  theme(
+    legend.position = "right",
+    plot.title = element_text(size = 15),
+    legend.title = element_text(size = 15))
+
+
+prev_dat_cmr_2011_sf_test$diff_class <- cut(
+  prev_dat_cmr_2011_sf_test$diff_PfPR,
+  breaks = breaks_prev_diff,
+  labels = labels_prev_diff,
+  include.lowest = TRUE
+)
+
+map1 <- mapview(
+  prev_dat_cmr_2011_sf_test,
+  zcol = "diff_class",
+  col.regions = colors_prev_diff,
+  layer.name = "Difference in prevalence (2011)",
+  legend = TRUE
+  )
+  
+
+mapshot(map1, 
+        file = "Outputs/cmr_output/Pf_pr_estimated/difference_prev_MAP_vsour_model.html",
+        selfcontained = T)
+
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_diff_pf_all_age_admin2_with_intervention.png",
+       plot = cmr_prev_5, width = 6, height = 4, dpi = 300)
 
 ```
-
 
 
 # Extract MAP data

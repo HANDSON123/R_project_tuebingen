@@ -593,7 +593,8 @@ st_write(cluster_data_cmr_sf, "data/cmr_data/cmr_cluster_df_1_sf.gpkg", append =
 countries1_sf <- rbind(shp_ben %>% dplyr::select(COUNTRY, NAME_3, geometry) %>% 
                          rename(country = COUNTRY,
                                 district = NAME_3), shp_con %>% dplyr::select(adm0_name,
-                                                                              adm2_name, geometry) %>% 
+                                                                              adm2_name,
+                                                                              geometry) %>% 
                          rename(country = adm0_name,
                                 district = adm2_name)) 
 
