@@ -82,6 +82,10 @@ fill_by_nearest <- function(sf_obj, colname) {
 # 
 # write_csv(d, "cmr_data/cmr_map_PR.csv")
 
+# africa_pf_pv_PR <- getPR(continent = "Africa", species = "BOTH")
+# 
+# write_csv(africa_pf_pv_PR, "data/Africa_data/Benchmark data/raw_pr_map.csv")
+
 ```
 
 
@@ -94,10 +98,6 @@ shp_cmr <- read_sf("data/cmr_data/CMR_shape_file/cameroun_districts_2024.shp")
 
 cmr_vect <- vect(shp_cmr)
 
-```
-
-
-```{r}
 GPS_cmr_coords_2011 <- GPS_cmr_2011 %>%
   st_drop_geometry() %>%
   mutate(
@@ -115,11 +115,9 @@ GPS_cmr_coords_2022 <- GPS_cmr_2022 %>%
   ) %>%
   dplyr::select(DHSCLUST, longitude, latitude) %>%
   filter(latitude != 0 & longitude != 0)
-```
 
 # loading the extracted MAP data
 
-```{r}
 raw_prevalence_cmr <- read.csv("data/cmr_data/cmr_map_PR.csv")
 
 raw_prevalence_cmr_with_coord <- raw_prevalence_cmr %>% 
@@ -142,11 +140,8 @@ map_recovered_cmr_2022 <- map_without_coords_cmr %>%
 
 cat("Recovered:", sum(!is.na(map_recovered_cmr_2011$longitude)), "\n")
 cat("Still missing:", sum(is.na(map_recovered_cmr_2011$longitude)), "\n")
-```
 
 
-
-```{r}
 map_full_cmr_2011 <- bind_rows(
   raw_prevalence_cmr_with_coord %>% filter(!is.na(longitude) & !is.na(latitude)),
   map_recovered_cmr_2011 %>% filter(!is.na(longitude) & !is.na(latitude))
@@ -172,7 +167,9 @@ map_full_cmr_2022 <- map_full_cmr_2022 %>%
 
 
 write_csv(map_full_cmr_2022, file = "data/cmr_data/cmr_MAP_full_raw_prevalence_2022.csv")
+
 ```
+
 
 # Filter for the year 2011 for our analysis
 
@@ -205,7 +202,8 @@ map_2011_cmr_sf$pr_class <- cut(
   include.lowest = TRUE
 )
 
-mapviewOptions(viewer.suppress = T)
+
+
 map <- mapview(shp_cmr,
         col.regions = "white",
         alpha.regions = 0.2,
@@ -224,293 +222,10 @@ htmlwidgets::saveWidget(map@map, "Outputs/cmr_output/raw_prevalence_map.html", s
 # Capture screenshot with webshot2
 webshot2::webshot("Outputs/cmr_output/raw_prevalence_map.html",
                   "Outputs/cmr_output/raw_prevalence_map.png", vwidth = 1200, vheight = 900)
-# mapshot2(map, file = "Outputs/cmr_output/raw_prevalence_map.png")
-# mapshot2(map, "Outputs/cmr_output/raw_prevalence_map.html", selfcontained = TRUE)
-
 
 plot(st_geometry(map_2011_cmr_sf), pch = 16, cex = 0.5, main = "2011 Survey Points — Cameroon")
 ```
 
-# Extraction of the covariates  
-```{r}
-path1 <- "data/cmr_data/chirps_2011/CHIRPS_PENTAD_precipitation_2011-01-01_2011-12-31_-5p8264to13p9448N_0p6930to19p1696E.precipitation.tif"
-path2 <- "data/cmr_data/ERA5_temperature/ERA5_LAND_DAILY_temperature_2m_2011-01-01_2011-12-31_-5p4765to13p9448N_0p6930to19p3454E.temperature_2m.tif"
-ndvi_path <- "data/cmr_data/NDVI2011/"
-# Load all 12 monthly NDVI tif files
-ndvi_files <- list.files(
-  ndvi_path,
-  pattern    = "_1_km_monthly_NDVI.*\\.tif$",
-  full.names = TRUE
-)
-
-cmr_ndvi_stack<- rast(ndvi_files)
-
-
-cmr_pop <- rast("data/cmr_data/cmr_pd_2011_1km_UNadj.tif")
-cmr_rainfall_2011 <- rast(path1)
-cmr_temperature_2011 <- rast(path2)
-elevation_cmr <- rast("data/cmr_data/elevation/cmr_elv_msk.tif")
-land_cover_water <- rast("data/ben_data/landuse/WorldCover_water_30s.tif")
-land_cover_trees <- rast("data/ben_data/landuse/WorldCover_trees_30s.tif")
-land_cover_builts <- rast("data/ben_data/landuse/WorldCover_built_30s.tif")
-land_cover_cropland <- rast("data/ben_data/landuse/WorldCover_cropland_30s.tif")
-land_cover_wetland <- rast("data/ben_data/landuse/WorldCover_wetland_30s.tif")
-cmr_ITN_2011  <- rast("data/ITN_2000/2025_GBD2024_Africa_ITN_2011.tif")
-cmr_ITN_2011  <- rast("data/ITN_2000_2/2026_GBD2025_Africa_ITN_Use_Rate_2011.tif")
-cmr_IRS_2011  <- rast("data/IRS_2000/2025_GBD2024_Africa_IRS_2011.tif")
-cmr_effective_treat_2011 <- rast("data/Effective_treat_2000_2025/2026_GBD2025_Global_Antimalarial_EFT_2011.tif")
-
-################################################################################
-#            Extraction of the covariates at the sampled location              #
-################################################################################
-
-cmr_pop  <- crop(cmr_pop,  cmr_vect)
-cmr_pop  <- mask(cmr_pop,  cmr_vect)
-
-cmr_rainfall_2011 <- crop(cmr_rainfall_2011, cmr_vect)
-cmr_rainfall_2011 <- mask(cmr_rainfall_2011, cmr_vect)
-
-cmr_temperature_2011 <- crop(cmr_temperature_2011, cmr_vect)
-cmr_temperature_2011 <- mask(cmr_temperature_2011, cmr_vect)
-
-cmr_ndvi_stack <- crop(cmr_ndvi_stack, cmr_vect)
-cmr_ndvi_stack <- mask(cmr_ndvi_stack, cmr_vect)
-
-elevation_cmr   <- crop(elevation_cmr, cmr_vect)
-elevation_cmr   <- mask(elevation_cmr, cmr_vect)
-
-cmr_land_cover_water     <- crop(land_cover_water, cmr_vect)
-cmr_land_cover_water     <- mask(cmr_land_cover_water, cmr_vect)
-
-cmr_land_cover_built     <- crop(land_cover_builts, cmr_vect)
-cmr_land_cover_built     <- mask(cmr_land_cover_built, cmr_vect)
-
-cmr_land_cover_cropland  <- crop(land_cover_cropland, cmr_vect)
-cmr_land_cover_cropland  <- mask(cmr_land_cover_cropland, cmr_vect)
-
-cmr_land_cover_trees     <- crop(land_cover_trees, cmr_vect)
-cmr_land_cover_trees     <- mask(cmr_land_cover_trees, cmr_vect)
-
-cmr_land_cover_wetland   <- crop(land_cover_wetland, cmr_vect)
-cmr_land_cover_wetland   <- mask(cmr_land_cover_wetland, cmr_vect)
-
-cmr_ITN_2011   <- crop(cmr_ITN_2011, cmr_vect)
-cmr_ITN_2011   <- mask(cmr_ITN_2011, cmr_vect)
-
-cmr_IRS_2011   <- crop(cmr_IRS_2011, cmr_vect)
-cmr_IRS_2011   <- mask(cmr_IRS_2011, cmr_vect)
-
-cmr_effective_treat_2011   <- crop(cmr_effective_treat_2011, cmr_vect)
-cmr_effective_treat_2011   <- mask(cmr_effective_treat_2011, cmr_vect)
-
-cmr_pop_density_2011_df <- terra::extract(cmr_pop,  map_2011_cmr_sf)
-cmr_rainfall_2011_df    <- terra::extract(cmr_rainfall_2011, map_2011_cmr_sf)
-cmr_temperature_2011_df <- terra::extract(cmr_temperature_2011, map_2011_cmr_sf)
-ndvi_vals_cmr_monthly <- terra::extract(cmr_ndvi_stack, map_2011_cmr_sf)
-ndvi_mean_cmr <- apply(ndvi_vals_cmr_monthly[,-1], 1, mean, na.rm = TRUE)
-elevation_cmr_df <- terra::extract(elevation_cmr, map_2011_cmr_sf)
-cmr_land_cover_water_df <- terra::extract(cmr_land_cover_water, map_2011_cmr_sf)
-cmr_land_cover_built_df <- terra::extract(cmr_land_cover_built, map_2011_cmr_sf)
-cmr_land_cover_cropland_df <- terra::extract(cmr_land_cover_cropland, map_2011_cmr_sf)
-cmr_land_cover_trees_df <- terra::extract(cmr_land_cover_trees, map_2011_cmr_sf)
-cmr_land_cover_wetland_df <- terra::extract(cmr_land_cover_wetland, map_2011_cmr_sf)
-cmr_ITN_2011_df   <- terra::extract(cmr_ITN_2011, map_2011_cmr_sf)
-cmr_IRS_2011_df   <- terra::extract(cmr_IRS_2011, map_2011_cmr_sf)
-cmr_effective_treat_2011_df   <- terra::extract(cmr_effective_treat_2011, map_2011_cmr_sf)
-
-
-# distance to water
-
-bbox <- st_bbox(shp_cmr)
-
-rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
-                  wkt_filter = st_as_text(st_as_sfc(bbox)))
-
-lakes  <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
-                  wkt_filter = st_as_text(st_as_sfc(bbox)))
-
-
-rivers_valid <- st_make_valid(rivers)
-lakes_valid  <- st_make_valid(lakes)
-
-rivers_valid <- ms_simplify(rivers_valid, keep = 0.3, keep_shapes = TRUE)
-lakes_valid  <- ms_simplify(lakes_valid,  keep = 0.3, keep_shapes = TRUE)
-
-
-# nearest river segment for each point
-nn_riv <- st_nn(map_2011_cmr_sf, rivers_valid, k = 1, returnDist = TRUE)
-dist_riv_min <- sapply(nn_riv$dist, `[`, 1)
-
-# nearest lake polygon for each point
-nn_lake <- st_nn(map_2011_cmr_sf, lakes_valid, k = 1, returnDist = TRUE)
-dist_lake_min <- sapply(nn_lake$dist, `[`, 1)
-
-
-map_2011_cmr_sf$dist_to_water <- pmin(dist_riv_min, dist_lake_min)
-
-
-cmr_pf_data_2011 <- map_2011_cmr_sf %>% 
-  dplyr::select(site_id, lower_age, upper_age, examined, positive, pr, species, dist_to_water) %>% 
-  mutate(pop_density = cmr_pop_density_2011_df[,2],
-         rainfall = cmr_rainfall_2011_df[,2],
-         temperature = cmr_temperature_2011_df[,2],
-         elevation = elevation_cmr_df[,2],
-         vegetation_index = ndvi_mean_cmr,
-         landcover_water = cmr_land_cover_water_df[,2],
-         landcover_trees = cmr_land_cover_trees_df[,2],
-         landcover_builts = cmr_land_cover_built_df[,2],
-         landcover_cropland = cmr_land_cover_cropland_df[,2],
-         landcover_wetland = cmr_land_cover_wetland_df[,2],
-         ITN_2011         = cmr_ITN_2011_df[,2],
-         effective_treat  = cmr_effective_treat_2011_df[,2]) %>% 
-  filter(species == "P. falciparum")
-
-
-numeric_cols <- names(cmr_pf_data_2011)[sapply(cmr_pf_data_2011, is.numeric)]
-
-for (col in numeric_cols) {
-  cmr_pf_data_2011 <- fill_by_nearest(cmr_pf_data_2011, col)
-}
-
-st_write(cmr_pf_data_2011, 
-         "data/cmr_data/benchmarking_spatial_data_cmr_sf.gpkg", append = FALSE)
-
-################################################################################
-#              build prediction grid  and covariates extract                   #
-################################################################################
-
-# resolution in meters (5000 m = 5 km)
-res <- 5000  
-
-box_cmr <- st_bbox(shp_cmr %>% st_transform(3857)) %>% st_as_sfc()
-# Create grid covering bounding box of Cameroon
-grid <- st_make_grid(
-  box_cmr,
-  cellsize = res,
-  what = "centers"
-)
-
-grid <- st_sf(geometry = grid)
-
-# Keep only grid points inside Cameroon
-grid <- st_intersection(grid, shp_cmr%>% st_transform(3857))
-
-cmr_vect <- vect(grid %>% st_transform(4326))
-
-# grid_ITN_usage_2021  <- project(ITN_intervention_2021,  st_crs(grid)$wkt)
-grid_pop  <- crop(cmr_pop,  cmr_vect)
-grid_pop  <- mask(cmr_pop,  cmr_vect)
-
-grid_rainfall_2021 <- crop(cmr_rainfall_2011, cmr_vect)
-grid_rainfall_2021 <- mask(cmr_rainfall_2011, cmr_vect)
-
-grid_temperature_2021 <- crop(cmr_temperature_2011, cmr_vect)
-grid_temperature_2021 <- mask(cmr_temperature_2011, cmr_vect)
-
-grid_ndvi_stack <- crop(cmr_ndvi_stack, cmr_vect)
-grid_ndvi_stack <- mask(cmr_ndvi_stack, cmr_vect)
-
-elevation_grid   <- crop(elevation_cmr, cmr_vect)
-elevation_grid   <- mask(elevation_cmr, cmr_vect)
-
-grid_land_cover_water   <- crop(land_cover_water, cmr_vect)
-grid_land_cover_water   <- mask(grid_land_cover_water, cmr_vect)
-
-grid_land_cover_built   <- crop(land_cover_builts, cmr_vect)
-grid_land_cover_built   <- mask(grid_land_cover_built, cmr_vect)
-
-grid_land_cover_cropland   <- crop(land_cover_cropland, cmr_vect)
-grid_land_cover_cropland   <- mask(grid_land_cover_cropland, cmr_vect)
-
-grid_land_cover_trees   <- crop(land_cover_trees, cmr_vect)
-grid_land_cover_trees   <- mask(grid_land_cover_trees, cmr_vect)
-
-grid_land_cover_wetland   <- crop(land_cover_wetland, cmr_vect)
-grid_land_cover_wetland   <- mask(grid_land_cover_wetland, cmr_vect)
-
-grid_ITN   <- crop(cmr_ITN_2011, cmr_vect)
-grid_ITN   <- mask(grid_ITN, cmr_vect)
-
-grid_IRS   <- crop(cmr_IRS_2011, cmr_vect)
-grid_IRS   <- mask(grid_IRS, cmr_vect)
-
-grid_effective_treat   <- crop(cmr_effective_treat_2011, cmr_vect)
-grid_effective_treat   <- mask(grid_effective_treat, cmr_vect)
-
-
-# grid_ITN_usage_2021_df <- terra::extract(grid_ITN_usage_2021,  grid)
-grid_pop_density_2020_df <- terra::extract(grid_pop,  cmr_vect)
-grid_rainfall_2021_df    <- terra::extract(grid_rainfall_2021, cmr_vect)
-grid_temperature_2021_df <- terra::extract(grid_temperature_2021, cmr_vect)
-ndvi_vals_grid_monthly <- terra::extract(grid_ndvi_stack, cmr_vect)
-ndvi_mean_grid <- apply(ndvi_vals_grid_monthly[,-1], 1, mean, na.rm = TRUE)
-elevation_grid_df <- terra::extract(elevation_grid, cmr_vect)
-grid_land_cover_water_df <- terra::extract(grid_land_cover_water, cmr_vect)
-grid_land_cover_built_df <- terra::extract(grid_land_cover_built, cmr_vect)
-grid_land_cover_cropland_df <- terra::extract(grid_land_cover_cropland, cmr_vect)
-grid_land_cover_trees_df <- terra::extract(grid_land_cover_trees, cmr_vect)
-grid_land_cover_wetland_df <- terra::extract(grid_land_cover_wetland, cmr_vect)
-grid_ITN_df                <- terra::extract(grid_ITN, cmr_vect)
-grid_effective_treat_df    <- terra::extract(grid_effective_treat, cmr_vect)
-
-
-# nearest river segment for each point
-
-bbox <- st_bbox(grid %>% st_transform(4326))
-
-rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
-                  wkt_filter = st_as_text(st_as_sfc(bbox)))
-
-lakes  <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
-                  wkt_filter = st_as_text(st_as_sfc(bbox)))
-
-
-rivers_valid <- st_make_valid(rivers)
-lakes_valid  <- st_make_valid(lakes)
-
-rivers_valid <- ms_simplify(rivers_valid, keep = 0.3, keep_shapes = TRUE)
-lakes_valid  <- ms_simplify(lakes_valid,  keep = 0.3, keep_shapes = TRUE)
-
-rivers_valid <- rivers_valid %>%  st_transform(3857)
-lakes_valid <- lakes_valid %>% st_transform(3857)
-
-nn_riv <- st_nn(grid, rivers_valid, k = 1, returnDist = TRUE)
-dist_riv_min <- sapply(nn_riv$dist, `[`, 1)
-
-# nearest lake polygon for each point
-nn_lake <- st_nn(grid, lakes_valid, k = 1, returnDist = TRUE)
-dist_lake_min <- sapply(nn_lake$dist, `[`, 1)
-
-
-grid$dist_to_water <- pmin(dist_riv_min, dist_lake_min)
-
-grid <- grid %>% 
-  mutate(rainfall            = grid_rainfall_2021_df[,2],
-         temperature         = grid_temperature_2021_df[,2],
-         pop_density         = grid_pop_density_2020_df[,2],
-         elevation           = elevation_grid_df[,2],
-         vegetation_index    = ndvi_mean_grid,
-         landcover_cropland  = grid_land_cover_cropland_df[,2],
-         landcover_water     = grid_land_cover_water_df[,2],
-         landcover_wetland   = grid_land_cover_wetland_df[,2],
-         landcover_builts    = grid_land_cover_built_df[,2],
-         landcover_trees     = grid_land_cover_trees_df[,2],
-         ITN_2011            = grid_ITN_df[,2],
-         effective_treat     = grid_effective_treat_df[,2]) 
-
-numeric_cols <- names(grid)[sapply(grid, is.numeric)]
-
-for (col in numeric_cols) {
-  grid <- fill_by_nearest(grid, col)
-}
-
-st_write(grid, "data/cmr_data/cmr_map_grid.gpkg", append = FALSE)
-
-
-
-
-
-```
 
 # Check for multicollinearity
 
@@ -1060,7 +775,7 @@ prev_dat_cmr_2011_sf_test <- shp_cmr %>%
          PfPR_u      = prev_summary_test$PfPR_u)
 
 
-# Convertion of the prevalence to all age group
+# Conversion of the prevalence to all age group
 
 n <- nrow(prev_dat_cmr_2011_sf)
 
@@ -1374,752 +1089,936 @@ spearman_cor <- cor(cmr_data_pev_map$prev_mean, cmr_data_pev_map$PR_all_age, met
 # 
 
 ```
-Overall, our model tends to overestimate malaria prevalence compared to MAP (bias ≈ 0.064), with typical differences of about 9–12 percentage points (MAE and RMSE). The moderate Pearson correlation (~0.55) shows that our model captures only part of MAP’s spatial variation, while the slightly higher Spearman correlation (~0.60) indicates that it does a somewhat better job ranking districts from low to high transmission than matching exact values. Taken together, these results suggest that oour model broadly identifies the same high‑burden and low‑burden areas as MAP but differs noticeably in magnitude, with some districts showing larger discrepancies. This is a solid foundation for a first geospatial model, but it also highlights clear opportunities to refine covariates, spatial structure, or calibration to better align with MAP’s established patterns.
 
+# Benchmark at the continental level
 ```{r}
+GPS_CI <- st_read("data/Africa_data/Benchmark data/CIGE81FL/CIGE81FL.shp")
+GPS_ET <- st_read("data/Africa_data/Benchmark data/ETGE81FLSR/ETGE81FLSR.shp")
+GPS_NG <- st_read("data/Africa_data/Benchmark data/NGGE81FL/NGGE81FL.shp")
+GPS_NI <- st_read("data/Africa_data/Benchmark data/NIGE81FL/NIGE81FL.shp")
+GPS_ML <- st_read("data/Africa_data/Benchmark data/MLGE81FL/MLGE81FL.shp")
+GPS_MR <- st_read("data/Africa_data/Benchmark data/MRGE71FL/MRGE71FL.shp")
+GPS_MD <- st_read("data/Africa_data/Benchmark data/MDGE81FL/MDGE81FL.shp")
+GPS_GN <- st_read("data/Africa_data/Benchmark data/GNGE81FL/GNGE81FL.shp")
+GPS_SN <- st_read("data/Africa_data/Benchmark data/SNGE8IFL/SNGE8IFL.shp")
+GPS_BF <- st_read("data/Africa_data/Benchmark data/BFGE81FL/BFGE81FL.shp")
+GPS_GA <- st_read("data/Africa_data/Benchmark data/GAGE71FL/GAGE71FL.shp")
 
-```
+africa_pf_PR <- read.csv("data/Africa_data/Benchmark data/raw_pr_map.csv")
+shp_africa <- st_read("data/Africa_data/shp_africa/Africa_simplified.shp")
 
-
-```{r}
-# cmr_map_data <- read.csv("cmr_data/cmr_map_PR.csv")
-# 
-# cmr_map_data_clean <- cmr_map_data %>%
-#   filter(!is.na(longitude) & !is.na(latitude)) %>% 
-#   filter(species=="P. falciparum") 
-# 
-# # Convert to sf spatial object
-# cmr_map_sf <- st_as_sf(
-#   cmr_map_data_clean,
-#   coords = c("longitude", "latitude"),
-#   crs    = 4326
-# )
-
-# Check
-# plot(st_geometry(cmr_map_sf), main = "MAP Survey Points")
-# 
-# shp_cmr <- st_transform(shp_cmr, crs=4326)
-# 
-# plot(st_geometry(shp_cmr))
-# plot(st_geometry(cmr_map_sf), col = "red", pch = 16, cex = 0.5, add = TRUE)
-# 
-# ggplot()+
-#   geom_sf(data = shp_cmr, fill=NA, color="black")+
-#   geom_sf(data=cmr_map_sf, color="red", size=0.2)
-
-
-# cmr_map_with_district <- st_join(
-#   cmr_map_sf,
-#   shp_cmr[, c("Admin1", "Admin2")],
-#   join = st_within
-# )
-# 
-# cmr_points_per_district <- cmr_map_with_district %>%
-#   st_drop_geometry() %>%
-#   group_by(Admin2) %>%
-#   summarise(n_surveys = n()) %>%
-#   arrange(desc(n_surveys))
-# 
-# #print(cmr_points_per_district)
-# 
-# 
-# cmr_district_prevalence <- cmr_map_with_district %>%
-#   st_drop_geometry() %>%
-#   filter(!is.na(Admin2)) %>%       
-#   group_by(Admin1, Admin2) %>%
-#   summarise(n_examined     = sum(examined,  na.rm = TRUE),
-#             n_positive     = sum(positive,  na.rm = TRUE),
-#             raw_prevalence = n_positive / n_examined,
-#             raw_pr         = sum(pr),
-#             n_surveys      = n(),
-#             year_min       = min(year_start, na.rm = TRUE),
-#             year_max       = max(year_end,   na.rm = TRUE),
-#             .groups = "drop")
-# 
-# 
-# #2011 data
-# 
-# cmr_map_2011 <- cmr_map_data_clean %>%
-#   filter(year_start == 2011 | year_end==2011) %>% 
-#   filter(species=="P. falciparum")
-# 
-# 
-# cmr_map_2011_sf <- st_as_sf(
-#   cmr_map_2011,
-#   coords = c("longitude", "latitude"),
-#   crs    = 4326
-# )
-# 
-# 
-# cmr_map_with_district_2011 <- st_join(
-#   cmr_map_2011_sf,
-#   shp_cmr[, c("Admin1", "Admin2")],
-#   join = st_within
-# )
-# 
-# 
-# cmr_observed_districts_2011 <- cmr_map_with_district_2011 %>%
-#   st_drop_geometry() %>%
-#   group_by(Admin1, Admin2) %>%
-#   summarise(
-#     n_points   = n(),
-#     n_examined = sum(examined, na.rm = TRUE),
-#     n_positive = sum(positive, na.rm = TRUE),
-#     .groups    = "drop"
-#   ) %>%
-#   mutate(raw_prevalence = n_positive / n_examined)
-# 
-# ggplot()+
-#   geom_sf(data = shp_cmr, fill=NA, color="black")+
-#   geom_sf(data = shp_cmr[shp_cmr$Admin2 %in% cmr_observed_districts_2011$Admin2, ], color="red")+
-#   geom_sf(data = cmr_map_2011_sf, color = "blue", size=2)
-# 
-# 
-# ### extract the observed districts as well as their neighbors
-# observed_names <- cmr_observed_districts_2011$Admin2
-# observed_districts_sf <- shp_cmr %>%
-#   filter(str_squish(Admin2) %in% observed_names)
-# 
-# nb_queen <- poly2nb(shp_cmr, queen = TRUE)
-# # Get row indices of observed districts in the full shape file
-# observed_indices <- which(
-#   str_squish(shp_cmr$Admin2) %in% observed_names
-# )
-# 
-# 
-# # Get neighbor indices for each observed district
-# neighbor_indices <- list()
-# 
-# for(i in observed_indices){
-#   neighbors_i <- nb_queen[[i]]
-#   cat("District:", shp_cmr$Admin2[i], 
-#       "Number of neighbors:", length(neighbors_i), "\n")
-#   neighbor_indices[[i]] <- neighbors_i
-# }
-# 
-# # Combine all neighbor indices into one vector
-# all_neighbor_indices <- unique(unlist(neighbor_indices))
-# # Remove observed districts from neighbor list
-# # (in case an observed district is neighbor of another observed district)
-# pure_neighbor_indices <- setdiff(all_neighbor_indices, observed_indices)
-# # Combine observed + neighbor indices
-# study_area_indices <- unique(c(observed_indices, pure_neighbor_indices))
-# 
-# # Extract study area from full shapefile
-# study_area_sf <- shp_cmr[study_area_indices, ] %>%
-#   mutate(district_type = ifelse(str_squish(Admin2) %in% observed_names,
-#       "Observed", "Neighbor"))
-# 
-# # Visualization of our study area
-# 
-# ggplot() +
-#   # Full country in background
-#   geom_sf(data = shp_cmr, fill = "white", color = "grey80") +
-#   # Study area
-#   geom_sf(
-#     data = study_area_sf,
-#     aes(fill = district_type),
-#     color = "grey40"
-#   ) +
-#   scale_fill_manual(
-#     values = c("Observed" = "#d73027", "Neighbor" = "#fee090"),
-#     name   = "District type"
-#   ) +
-#   labs(
-#     title    = "Study Area: Observed and Neighbor Districts",
-#     subtitle = "Cameroon 2011: Queen Contiguity"
-#   ) +
-#   theme_minimal()+
-#   theme(
-#     axis.text  = element_blank(),
-#     axis.ticks = element_blank()
-#   )
-# 
-# # Merge aggregated prevalence into study area
-# study_area_sf <- study_area_sf %>%
-#   left_join(
-#     cmr_observed_districts_2011,
-#     by = c("Admin2")
-#   ) %>%
-#   mutate(
-#     # Neighbor districts have NA for observed data — correct
-#     n_examined = ifelse(is.na(n_examined), NA, n_examined),
-#     n_positive = ifelse(is.na(n_positive), NA, n_positive)
-#   )
-
-
-```
-
-
-
-```{r}
-## Building the adjacency matrix for our model
-
-study_area_sf <- study_area_sf %>%
-  mutate(district_id = 1:nrow(.)) 
-
-nb_study <- poly2nb(study_area_sf, queen = TRUE)
-
-# # Summary
-# summary(nb_study)
-# 
-# nb_check <- nb2listw(nb_study, style = "B", zero.policy = TRUE)
-# 
-# 
-components <- n.comp.nb(nb_study)
-cat("Number of connected components:", components$nc, "\n")
-
-# Which districts belong to which component
-study_area_sf$component <- components$comp.id
-print(study_area_sf[, c("Admin2", "district_type", "component")])
-
-nb2INLA("study_area_adj.graph", nb_study)
-
-file.exists("study_area_adj.graph")
-
-
-### Visualize the study area
-
-coords <- st_coordinates(st_centroid(study_area_sf))
-nb_lines <- map2_dfr(
-  .x = seq_along(nb_study),
-  .y = nb_study,
-  .f = function(i, neighbors) {
-    if (length(neighbors) == 0) return(NULL)
-
-    map_dfr(neighbors, function(j) {
-      st_linestring(rbind(coords[i, ], coords[j, ])) |> 
-        st_sfc(crs = st_crs(study_area_sf)) |> 
-        st_sf(from = i, to = j, geometry = _)
-    })
-  }
-)
-
-
-ggplot() +
-  # District polygons
-  geom_sf(
-    data = study_area_sf,
-    aes(fill = district_type),
-    color = "black",
-    size = 0.3
-  ) +
-  
-  # Neighbor links
-  geom_sf(
-    data = nb_lines,
-    color = "blue",
-    size = 0.7
-  ) +
-  
-  # District labels
-  geom_text(
-    data = cbind(study_area_sf, coords),
-    aes(X, Y, label = Admin2),
-    size = 3
-  ) +
-  
-  scale_fill_manual(
-    values = c("Observed" = "#d73027", "Neighbor" = "#fee090")
-  ) +
-  
-  labs(
-    title = "Queen Contiguity Neighborhood Structure",
-    fill = "District Type"
-  ) +
-  
-  theme_minimal()+
-  theme(
-    axis.text  = element_blank(),
-    axis.ticks = element_blank()
-  )
-
-study_area_sf <- study_area_sf %>%
-  mutate(
-    component_factor = as.factor(component)
-  )
-
-```
-
-
-```{r}
-#building our model
-
-model_data <- study_area_sf %>%
+GPS_CI_coords_2021 <- GPS_CI %>%
   st_drop_geometry() %>%
-  dplyr::select(district_id, Admin2, district_type, 
-                component, n_examined, n_positive) %>%
   mutate(
-    # R-INLA needs numeric outcome
-    n_examined = as.integer(n_examined),
-    n_positive = as.integer(n_positive),
-    
-    # District ID for spatial random effect
-    district_id_unstr = district_id  # separate copy for unstructured effect
-  )
+    longitude = st_coordinates(GPS_CI)[, 1],
+    latitude  = st_coordinates(GPS_CI)[, 2]
+  ) %>%
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  mutate(country = "Côte d'Ivoire") %>% 
+  filter(latitude != 0 & longitude != 0)
 
-# Define formula
-# No covariates — only intercept + spatial + unstructured random effects
-formula_null <- n_positive ~ 1 +
-  f(district_id,
-    model         = "besag",        # spatially structured ICAR
-    graph         = "study_area_adj.graph",
-    scale.model   = TRUE,
-    constr        = TRUE,
-    hyper         = list(
-      prec = list(prior = "pc.prec", param = c(1, 0.01))
-    )
-  ) +
-  f(district_id_unstr,
-    model = "iid",                  # unstructured random effect
-    hyper = list(
-      prec = list(prior = "pc.prec", param = c(1, 0.01))
-    )
-  )
-
-# Fit the model
-model_null <- inla(
-  formula_null,
-  family          = "binomial",
-  Ntrials         = model_data$n_examined,
-  data            = model_data,
-  control.predictor = list(
-    compute = TRUE,
-    link    = 1          # use the link function for predictions
-  ),
-  control.compute = list(
-    dic  = TRUE,
-    waic = TRUE,
-    cpo  = TRUE
-  )
-)
-
-# Summary
-summary(model_null)
-
-
-# Extract posterior mean and 95% credible intervals
-model_data$prev_mean  <- model_null$summary.fitted.values$mean
-model_data$prev_lower <- model_null$summary.fitted.values$`0.025quant`
-model_data$prev_upper <- model_null$summary.fitted.values$`0.975quant`
-
-# Check results
-model_data %>%
-  dplyr::select(Admin2, district_type, 
-                n_examined, n_positive,
-                prev_mean, prev_lower, prev_upper) %>%
-  mutate(across(c(prev_mean, prev_lower, prev_upper), 
-                ~ round(., 3)))
-
-study_area_results <- study_area_sf %>%
-  left_join(
-    model_data %>% dplyr::select(district_id, prev_mean, 
-                                  prev_lower, prev_upper),
-    by = "district_id"
-  )
-
-ggplot() +
-  geom_sf(data = shp_cmr, fill = "grey95", color = "grey80") +
-  geom_sf(
-    data = study_area_results,
-    aes(fill = prev_mean),
-    color = "grey40"
-  ) +
-  scale_fill_viridis_c(
-    name   = "Prevalence",
-    option = "magma",
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  labs(
-    title    = "Estimated Malaria Prevalence — Null Spatial Model",
-    subtitle = "BYM2 without covariates — Cameroon 2011"
-  ) +
-  theme_minimal()
-
-# Map uncertainty (width of credible interval)
-study_area_results <- study_area_results %>%
-  mutate(ci_width = prev_upper - prev_lower)
-
-ggplot() +
-  geom_sf(data = shp_cmr, fill = "grey95", color = "grey80") +
-  geom_sf(
-    data = study_area_results,
-    aes(fill = ci_width),
-    color = "grey40"
-  ) +
-  scale_fill_viridis_c(
-    name   = "CI Width",
-    option = "rocket",
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  labs(
-    title    = "Model Uncertainty — Null Spatial Model",
-    subtitle = "Width of 95% Credible Interval"
-  ) +
-  theme_minimal()
-
-```
-
-
-```{r}
-# merging the extracted covariates with the study areas data
-
-# Extract district names from your study area
-study_districts <- study_area_sf %>%
+GPS_ET_coords_2021 <- GPS_ET %>%
   st_drop_geometry() %>%
-  dplyr::select(district_id, Admin2, 
-                district_type, component,
-                n_examined, n_positive)
-
-# loading the covariates data
-
-rainfall_cmr_2011 <- read.csv("cmr_data/cmr_rainfall_2011.csv")
-temperature_cmr_2011 <- read.csv("cmr_data/cmr_temperature_2011.csv")
-vegetation_index_cmr_2011 <- read.csv("cmr_data/cmr_vegetation_index_2011.csv")
-population_density_cmr_2011 <- read.csv("cmr_data/cmr_pop_density_2011.csv")
-elevation_data_cmr <- read.csv("cmr_data/cmr_elevation_data.csv")
-land_cover_data_cmr <- read.csv("cmr_data/cmr_landcover_per_district.csv")
-distance_to_water_cmr <- read.csv("cmr_data/cmr_distance_to_water.csv")
-
-
-# Filter each CSV to keep only study area districts
-# then merge all together
-
-model_data <- study_districts %>%
-  
-  # Rainfall
-  left_join(
-    rainfall_cmr_2011 %>% dplyr::select(District, mean_rainfall),
-    by = c("Admin2" = "District")
+  mutate(
+    longitude = st_coordinates(GPS_ET)[, 1],
+    latitude  = st_coordinates(GPS_ET)[, 2]
   ) %>%
-  
-  # Temperature
-  left_join(
-    temperature_cmr_2011 %>% dplyr::select(District, mean_temperature),
-    by = c("Admin2" = "District")
+  dplyr::select(SPAFACID, longitude, latitude) %>%
+  rename(DHSCLUST = SPAFACID) %>% 
+  mutate(country = "Ethiopia") %>% 
+  filter(latitude != 0 & longitude != 0)
+
+GPS_NI_coords_2021 <- GPS_NI %>%
+  st_drop_geometry() %>%
+  mutate(
+    longitude = st_coordinates(GPS_NI)[, 1],
+    latitude  = st_coordinates(GPS_NI)[, 2]
   ) %>%
-  
-  # NDVI
-  left_join(
-    vegetation_index_cmr_2011 %>% dplyr::select(District, NDVI),
-    by = c("Admin2" = "District")
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  mutate(country = "Niger") %>% 
+  filter(latitude != 0 & longitude != 0)
+
+GPS_NG_coords_2021 <- GPS_NG %>%
+  st_drop_geometry() %>%
+  mutate(
+    longitude = st_coordinates(GPS_NG)[, 1],
+    latitude  = st_coordinates(GPS_NG)[, 2]
   ) %>%
-  
-  # Elevation
-  left_join(
-    elevation_data_cmr %>% dplyr::select(District, mean_elevation),
-    by = c("Admin2" = "District")
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  mutate(country = "Nigeria") %>%
+  filter(latitude != 0 & longitude != 0)
+
+
+GPS_ML_coords_2021 <- GPS_ML %>%
+  st_drop_geometry() %>%
+  mutate(
+    longitude = st_coordinates(GPS_ML)[, 1],
+    latitude  = st_coordinates(GPS_ML)[, 2]
   ) %>%
-  
-  # Population density
-  left_join(
-    population_density_cmr_2011 %>% dplyr::select(District, pop_density_2011),
-    by = c("Admin2" = "District")
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  mutate(country = "Mali") %>%
+  filter(latitude != 0 & longitude != 0)
+
+GPS_MR_coords_2021 <- GPS_MR %>%
+  st_drop_geometry() %>%
+  mutate(
+    longitude = st_coordinates(GPS_MR)[, 1],
+    latitude  = st_coordinates(GPS_MR)[, 2]
   ) %>%
-  
-  # Distance to water
-  left_join(
-    distance_to_water_cmr %>% dplyr::select(District, dist_to_water_km),
-    by = c("Admin2" = "District")
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  mutate(country = "Mauritania") %>%
+  filter(latitude != 0 & longitude != 0)
+
+GPS_MD_coords_2021 <- GPS_MD %>%
+  st_drop_geometry() %>%
+  mutate(
+    longitude = st_coordinates(GPS_MD)[, 1],
+    latitude  = st_coordinates(GPS_MD)[, 2]
   ) %>%
-  
-  # Land cover
-  left_join(
-    land_cover_data_cmr %>% dplyr::select(District, prop_trees, prop_water,
-                                 prop_wetland, prop_cropland, prop_built),
-    by = c("Admin2" = "District")
-  )
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  mutate(country = "Madagascar") %>%
+  filter(latitude != 0 & longitude != 0)
 
-#save the data
-write_csv(model_data, "cmr_data/cmr_study_area_model_data_2011.csv")
+GPS_GN_coords_2021 <- GPS_GN %>%
+  st_drop_geometry() %>%
+  mutate(
+    longitude = st_coordinates(GPS_GN)[, 1],
+    latitude  = st_coordinates(GPS_GN)[, 2]
+  ) %>%
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  mutate(country = "Guinea") %>%
+  filter(latitude != 0 & longitude != 0)
 
-covariate_cols <- c("mean_rainfall", "mean_temperature",
-                    "NDVI", "mean_elevation", "pop_density_2011",
-                    "dist_to_water_km", "prop_trees", "prop_water",
-                    "prop_wetland", "prop_cropland", "prop_built")
+GPS_SN_coords_2021 <- GPS_SN %>%
+  st_drop_geometry() %>%
+  mutate(
+    longitude = st_coordinates(GPS_SN)[, 1],
+    latitude  = st_coordinates(GPS_SN)[, 2]
+  ) %>%
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  mutate(country = "Senegal") %>%
+  filter(latitude != 0 & longitude != 0)
 
-# Standardize to mean 0 and SD 1
-model_data <- model_data %>%
-  mutate(across(
-    all_of(covariate_cols),
-    ~ scale(.) %>% as.vector(),
-    .names = "{.col}_std"
-  ))
+GPS_BF_coords_2021 <- GPS_BF %>%
+  st_drop_geometry() %>%
+  mutate(
+    longitude = st_coordinates(GPS_BF)[, 1],
+    latitude  = st_coordinates(GPS_BF)[, 2]
+  ) %>%
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  mutate(country = "Burkina Faso") %>%
+  filter(latitude != 0 & longitude != 0)
 
-# Add unstructured random effect ID
-model_data <- model_data %>%
-  mutate(district_id_unstr = district_id)
-
-# Check standardized values
-model_data %>%
-  dplyr::select(Admin2, ends_with("_std")) %>%
-  head()
-
-
-cov_matrix <- model_data %>%
-  dplyr::select(all_of(covariate_cols)) %>%
-  cor(use = "complete.obs")
-
-print(round(cov_matrix, 2))
-
-corrplot(cov_matrix,
-         method      = "color",
-         type        = "upper",
-         tl.cex      = 0.7,
-         addCoef.col = "black",
-         number.cex  = 0.6)
+GPS_GA_coords_2021 <- GPS_GA %>%
+  st_drop_geometry() %>%
+  mutate(
+    longitude = st_coordinates(GPS_GA)[, 1],
+    latitude  = st_coordinates(GPS_GA)[, 2]
+  ) %>%
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  mutate(country = "Gabon") %>%
+  filter(latitude != 0 & longitude != 0)
 
 
-final_covariates <- c("mean_rainfall", "mean_temperature",
-                      "NDVI", "dist_to_water_km",
-                      "prop_wetland", "prop_cropland", "prop_built")
+africa_pf_PR_with_coord_2021 <- africa_pf_PR %>% 
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  filter(year_start == 2021 | year_end == 2021)%>% 
+  select(country, year_start, year_end, lower_age, upper_age, species, examined,
+         positive, pr, method, longitude, latitude)
 
-# Check correlations again
-final_cor <- model_data %>%
-  dplyr::select(all_of(final_covariates)) %>%
-  cor(use = "complete.obs")
+africa_pf_PR_without_coord_2021 <- africa_pf_PR %>% 
+  filter(is.na(longitude) & is.na(latitude)) %>% 
+  dplyr::select(-c(longitude, latitude))%>% 
+  filter(year_start == 2021 | year_end == 2021)
 
-corrplot(final_cor,
-         method      = "color",
-         type        = "upper",
-         tl.cex      = 0.7,
-         addCoef.col = "black",
-         number.cex  = 0.6)
+
+
+africa_pf_PR_without_coord_2021 <- africa_pf_PR_without_coord_2021 %>%
+  mutate(DHSCLUST = as.integer(substr(dhs_id, 8, 16)))
+
+
+raw_pr_CI_2021 <- africa_pf_PR_without_coord_2021 %>% 
+  left_join(GPS_CI_coords_2021) %>% 
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  select(country, year_start, year_end, lower_age, upper_age, species, examined,
+         positive, pr, method, longitude, latitude)
+
+raw_pr_NI_2021 <- africa_pf_PR_without_coord_2021 %>% 
+  left_join(GPS_NI_coords_2021) %>% 
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  select(country, year_start, year_end, lower_age, upper_age, species, examined,
+         positive, pr, method, longitude, latitude)
+
+raw_pr_NG_2021 <- africa_pf_PR_without_coord_2021 %>% 
+  left_join(GPS_NG_coords_2021) %>% 
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  select(country, year_start, year_end, lower_age, upper_age, species, examined,
+         positive, pr, method, longitude, latitude)
+
+raw_pr_ML_2021 <- africa_pf_PR_without_coord_2021 %>% 
+  left_join(GPS_ML_coords_2021) %>% 
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  select(country, year_start, year_end, lower_age, upper_age, species, examined,
+         positive, pr, method, longitude, latitude)
+
+raw_pr_MR_2021 <- africa_pf_PR_without_coord_2021 %>% 
+  left_join(GPS_MR_coords_2021) %>% 
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  select(country, year_start, year_end, lower_age, upper_age, species, examined,
+         positive, pr, method, longitude, latitude)
+
+raw_pr_MD_2021 <- africa_pf_PR_without_coord_2021 %>% 
+  left_join(GPS_MD_coords_2021) %>% 
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  select(country, year_start, year_end, lower_age, upper_age, species, examined,
+         positive, pr, method, longitude, latitude)
+
+raw_pr_GN_2021 <- africa_pf_PR_without_coord_2021 %>% 
+  left_join(GPS_GN_coords_2021) %>% 
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  select(country, year_start, year_end, lower_age, upper_age, species, examined,
+         positive, pr, method, longitude, latitude)
+
+raw_pr_SN_2021 <- africa_pf_PR_without_coord_2021 %>% 
+  left_join(GPS_SN_coords_2021) %>% 
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  select(country, year_start, year_end, lower_age, upper_age, species, examined,
+         positive, pr, method, longitude, latitude)
+
+raw_pr_BF_2021 <- africa_pf_PR_without_coord_2021 %>% 
+  left_join(GPS_BF_coords_2021) %>% 
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  select(country, year_start, year_end, lower_age, upper_age, species, examined,
+         positive, pr, method, longitude, latitude)
+
+raw_pr_GA_2021 <- africa_pf_PR_without_coord_2021 %>% 
+  left_join(GPS_GA_coords_2021) %>% 
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  select(country, year_start, year_end, lower_age, upper_age, species, examined,
+         positive, pr, method, longitude, latitude)
+
+africa_pf_PR_with_coord_join_2021 <- raw_pr_CI_2021 %>% 
+  bind_rows(raw_pr_NI_2021) %>% 
+  bind_rows(raw_pr_NG_2021) %>% 
+  bind_rows(raw_pr_ML_2021) %>% 
+  bind_rows(raw_pr_MR_2021) %>% 
+  bind_rows(raw_pr_MD_2021) %>% 
+  bind_rows(raw_pr_GN_2021) %>% 
+  bind_rows(raw_pr_SN_2021) %>% 
+  bind_rows(raw_pr_BF_2021) %>% 
+  bind_rows(raw_pr_GA_2021) %>% 
+  bind_rows(africa_pf_PR_with_coord_2021) %>% 
+  filter(species == "P. falciparum") %>% 
+  group_by(longitude, latitude) %>% 
+  mutate(examined = sum(examined, na.rm = T),
+         positive = sum(positive, na.rm = T),
+         pr       = positive/examined) %>% 
+  ungroup() %>% 
+  distinct()
+
+write_csv(africa_pf_PR_with_coord_join_2021,
+          file = "data/Africa_data/africa_MAP_full_raw_prevalence_2021.csv")
+```
+
+# Visualization of the observed data
+
+```{r}
+africa_pf_PR_with_coord_join_2021 <- read.csv("data/Africa_data/africa_MAP_full_raw_prevalence_2021.csv")
+
+africa_pf_PR_with_coord_join_2021_sf <- st_as_sf(africa_pf_PR_with_coord_join_2021,
+                                              coords = c("longitude", "latitude"),
+                                              crs = 4326)
+
+
+breaks_pr <- c(0, 0.05, 0.10, 0.20, 0.40, 0.60, 1)
+labels_pr <- c(
+  "0–5%", "5–10%", "10–20%", "20–40%", "40–60%", ">60%"
+)
+
+colors_pr <- c(
+  "#ffffcc",  # pale yellow (very low)
+  "#ffeda0",  # light yellow
+  "#feb24c",  # orange
+  "#fd8d3c",  # deep orange
+  "#f03b20",  # red
+  "#bd0026"   # dark red (very high)
+)
+
+africa_pf_PR_with_coord_join_2021_sf$pr_class <- cut(
+  africa_pf_PR_with_coord_join_2021_sf$pr,
+  breaks = breaks_pr,
+  labels = labels_pr,
+  include.lowest = TRUE
+)
+
+
+map1 <- mapview(shp_africa,
+        col.regions = "white",
+        alpha.regions = 0.2,
+        color = "black") +
+  mapview(africa_pf_PR_with_coord_join_2021_sf,
+          zcol = "pr_class",             # categorical variable
+          cex = "examined",
+          col.regions = colors_pr,       # one color per class
+          layer.name = "P. malariae prevalence",
+          legend = TRUE)
+
+
+# Save widget manually
+htmlwidgets::saveWidget(map1@map, "Outputs/africa_output/raw_prevalence_map.html", selfcontained = TRUE)
+
+# Capture screenshot with webshot2
+webshot2::webshot("Outputs/africa_output/raw_prevalence_map.html",
+                  "Outputs/africa_output/raw_prevalence_map.png", vwidth = 1200, vheight = 900)
 
 ```
 
 
 ```{r}
-#run the model with covariates
+sampled_data_join_sf <- st_read("data/Africa_data/africa_pf_PR_with_coord_join_2021_sf.gpkg")
+grid_sf_africa <- st_read("data/Africa_data/grid_data_for_prediction_sf.gpkg")
 
-# Add unstructured ID
-model_data <- model_data %>%
-  mutate(district_id_unstr = district_id)
 
-# Define formula with all 7 covariates
-formula_full <- n_positive ~ 1 +
-  # Fixed effects — standardized covariates
-  mean_rainfall_std +
-  mean_temperature_std +
-  NDVI_std +
-  dist_to_water_km_std +
-  prop_wetland_std +
-  prop_cropland_std +
-  prop_built_std +
-  # Spatially structured random effect
-  f(district_id,
-    model       = "besag",
-    graph       = "study_area_adj.graph",
-    scale.model = TRUE,
-    constr      = TRUE,
-    hyper       = list(
-      prec = list(prior = "pc.prec", param = c(1, 0.01))
-    )
-  ) +
-  # Unstructured random effect
-  f(district_id_unstr,
-    model = "iid",
-    hyper = list(
-      prec = list(prior = "pc.prec", param = c(1, 0.01))
-    )
-  )
+shp_africa <- st_read("data/Africa_data/shp_africa/Africa_simplified.shp") %>% st_transform(3857)
 
-# Fit the model
-model_full <- inla(
-  formula_full,
-  family            = "binomial",
-  Ntrials           = model_data$n_examined,
-  data              = model_data,
+Africa_union <- st_union(shp_africa )
+
+sampled_data_join_sf <- sampled_data_join_sf %>% st_transform(3857)
+
+sampled_data_join_sf_sp     <- as(sampled_data_join_sf, "Spatial")
+Africa_union_sp <- as(Africa_union, "Spatial")
+
+coords_Africa <- coordinates(sampled_data_join_sf_sp)
+
+
+mesh_Africa <- inla.mesh.2d(
+  loc      = coords_Africa,
+  boundary = inla.sp2segment(Africa_union_sp),
+  max.edge = c(500e3, 1000e3),   
+  cutoff   = 200e3,
+  offset   = c(100e3, 2000e3))
+
+# Extract triangle vertex indices
+tri <- mesh_Africa$graph$tv
+
+
+# Build edges from triangles
+edges_list <- list()
+
+for (i in 1:nrow(tri)) {
+  idx <- tri[i, ]
+  # Each triangle has 3 edges
+  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_Africa$loc[idx[c(1,2)], 1:2])
+  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_Africa$loc[idx[c(2,3)], 1:2])
+  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_Africa$loc[idx[c(3,1)], 1:2])
+}
+
+mesh_edges_sf <- st_as_sf(st_sfc(edges_list, crs = 3857))
+
+coords_df_Africa <- as.data.frame(coords_Africa)
+colnames(coords_df_Africa) <- c("X", "Y")
+
+ggplot() +
+  geom_sf(data = mesh_edges_sf, fill = NA, color = "grey60", size = 0.3) +
+  geom_sf(data = Africa_union, fill = NA, color = "black", size = 0.8) +
+  geom_point(data = coords_df_Africa, aes(X, Y), color = "red", size = 1.5) +
+  theme_minimal() +
+  ggtitle("Mesh for Africa with Boundary")
+```
+
+```{r}
+num_vars <- sampled_data_join_sf %>% 
+  st_drop_geometry() %>% 
+  dplyr::select(c(
+  "annual_rainfall_2021", "annual_temperature_2021", "elevation", "vegetation_index",
+  "pop_density_2020", "dist_to_water", "lc_water", "lc_trees", "annual_ITN_usage_2021",
+  "lc_built", "lc_cropland", "lc_wetland"))
+
+
+M <- cor(num_vars, use = "pairwise.complete.obs")
+
+corrplot(
+  M,
+  method = "color",
+  type = "upper",
+  addCoef.col = "black",   
+  tl.col = "black",
+  tl.srt = 45,
+  number.cex = 0.7
+)
+
+fit <- lm(
+  pr ~ annual_rainfall_2021 + 
+    annual_temperature_2021 + elevation + vegetation_index + pop_density_2020 + 
+    dist_to_water + lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + annual_ITN_usage_2021,
+  data = sampled_data_join_sf
+)
+
+vif(fit)
+
+```
+
+# Variogram
+```{r}
+sampled_data_join_sf <- sampled_data_join_sf %>% st_transform(3857)
+
+vgm_emp <- variogram(pr ~ 1, data = sampled_data_join_sf)   # prevalence vs distance
+plot(vgm_emp)
+
+vgm_mod <- fit.variogram(
+  vgm_emp,
+  model = vgm("Mat", nugget = 0.04, psill = 0.065, range = 500000, kappa = 0.55)
+)
+vgm_mod
+
+plot(vgm_emp, vgm_mod)
+```
+
+
+```{r}
+#| label: Overdispersion
+
+ # scaling of the varibles
+
+sampled_data_join_sf_scale <- sampled_data_join_sf %>% 
+  mutate(annual_rainfall_2021    = as.numeric(scale(annual_rainfall_2021)),
+         annual_temperature_2021 = as.numeric(scale(annual_temperature_2021)),
+         pop_density_2020        = as.numeric(scale(pop_density_2020)),
+         dist_to_water           = as.numeric(scale(dist_to_water)),
+         elevation               = as.numeric(scale(elevation)),
+         vegetation_index        = as.numeric(scale(vegetation_index)))
+
+
+glm_binom1 <- glm(
+  cbind(positive, examined - positive) ~ 1,
+  family = "binomial",
+  data = sampled_data_join_sf_scale
+)
+
+pearson_res1 <- residuals(glm_binom1, type = "pearson")
+
+phi <- sum(pearson_res1^2) / glm_binom1$df.residual
+
+phi
+
+glm_binom2 <- glm(
+  cbind(positive, examined - positive) ~
+    annual_rainfall_2021 + pop_density_2020 + dist_to_water + lc_water + lc_trees + lc_cropland +
+    lc_built + lc_wetland + annual_temperature_2021 + elevation + vegetation_index,
+  family = "binomial",
+  data = sampled_data_join_sf_scale
+)
+
+pearson_res2 <- residuals(glm_binom2, type = "pearson")
+
+phi <- sum(pearson_res2^2) / glm_binom2$df.residual
+
+phi
+```
+
+```{r}
+spde_Africa <- inla.spde2.pcmatern(
+  mesh = mesh_Africa,
+  prior.range = c(500000, 0.5),
+  prior.sigma = c(0.24, 0.5))
+
+A_est <- inla.spde.make.A(mesh_Africa, loc = coords_Africa)
+
+#1. Variables to be scale
+vars_to_scale <- c("annual_rainfall_2021", "annual_temperature_2021", 
+                   "pop_density_2020", "dist_to_water", "elevation")
+
+# 2. Create a named list to store the training parameters (Means and SDs)
+scaling_stats <- list()
+
+# 3. Scale the observed data and extract the parameters
+for (var in vars_to_scale) {
+  # Calculate mean and standard deviation from the 36 observed points
+  mean_val <- mean(sampled_data_join_sf[[var]], na.rm = TRUE)
+  sd_val   <- sd(sampled_data_join_sf[[var]], na.rm = TRUE)
+  
+  # Store them for later use on the grid
+  scaling_stats[[var]] <- c(mean = mean_val, sd = sd_val)
+  
+  # Apply the scaling to the observed data
+  sampled_data_join_sf[[var]] <- (sampled_data_join_sf[[var]] - mean_val) / sd_val
+}
+
+
+```
+
+
+```{r}
+effects_fixed_tree <- data.frame(
+  intercept                    = 1,
+  annual_rainfall_2021         = sampled_data_join_sf$annual_rainfall_2021,
+  annual_temperature_2021      = sampled_data_join_sf$annual_temperature_2021,
+  elevation                    = sampled_data_join_sf$elevation,
+  pop_density_2020             = sampled_data_join_sf$pop_density_2020,
+  dist_to_water                = sampled_data_join_sf$dist_to_water,
+  lc_water                     = sampled_data_join_sf$lc_water,
+  lc_trees                     = sampled_data_join_sf$lc_trees,
+  lc_built                     = sampled_data_join_sf$lc_built,
+  lc_cropland                  = sampled_data_join_sf$lc_cropland,
+  lc_wetland                   = sampled_data_join_sf$lc_wetland,
+  annual_ITN_usage_2021        = sampled_data_join_sf$annual_ITN_usage_2021
+)
+
+effects_fixed_vegetation_index <- data.frame(
+  intercept                    = 1,
+  annual_rainfall_2021         = sampled_data_join_sf$annual_rainfall_2021,
+  annual_temperature_2021      = sampled_data_join_sf$annual_temperature_2021,
+  elevation                    = sampled_data_join_sf$elevation,
+  vegetation_index            = sampled_data_join_sf$vegetation_index,
+  pop_density_2020             = sampled_data_join_sf$pop_density_2020,
+  dist_to_water                = sampled_data_join_sf$dist_to_water,
+  lc_water                     = sampled_data_join_sf$lc_water,
+  lc_built                     = sampled_data_join_sf$lc_built,
+  lc_cropland                  = sampled_data_join_sf$lc_cropland,
+  lc_wetland                   = sampled_data_join_sf$lc_wetland,
+  annual_ITN_usage_2021        = sampled_data_join_sf$annual_ITN_usage_2021
+)
+
+
+stk_est_trees <- inla.stack(
+  data = list(
+    y       = sampled_data_join_sf$positive,
+    Ntrials = sampled_data_join_sf$examined
+  ),
+  A = list(A_est, 1),
+  effects = list(
+    spatial = 1:spde_Africa$n.spde,
+    effects_fixed_tree
+  ),
+  tag = "est"
+)
+
+
+stk_est_vegetation_index <- inla.stack(
+  data = list(
+    y       = sampled_data_join_sf$positive,
+    Ntrials = sampled_data_join_sf$examined
+  ),
+  A = list(A_est, 1),
+  effects = list(
+    spatial = 1:spde_Africa$n.spde,
+    effects_fixed_vegetation_index
+  ),
+  tag = "est"
+)
+
+
+formula_trees <- y ~ 
+  -1 +
+  intercept +
+  annual_rainfall_2021 + annual_temperature_2021 + elevation + pop_density_2020 + dist_to_water +
+  lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + annual_ITN_usage_2021 +
+  f(spatial, model = spde_Africa)
+
+formula_vegetation_index <- y ~ 
+  -1 +
+  intercept +
+  annual_rainfall_2021 + annual_temperature_2021 + elevation + pop_density_2020 + dist_to_water +
+  lc_water + vegetation_index + lc_built + lc_cropland + lc_wetland + annual_ITN_usage_2021 +
+  f(spatial, model = spde_Africa)
+
+
+res_trees <- inla(
+  formula_trees,
+  family = "betabinomial",
+  data = inla.stack.data(stk_est_trees),
+  Ntrials = inla.stack.data(stk_est_trees)$Ntrials,
   control.predictor = list(
-    compute = TRUE,
-    link    = 1
+    A = inla.stack.A(stk_est_trees),
+    compute = TRUE
   ),
-  control.compute   = list(
-    dic  = TRUE,
-    waic = TRUE,
-    cpo  = TRUE
-  )
+  control.fixed = list(
+    mean = 0,
+    prec = 0.2
+  ),
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE)
 )
 
-# Summary
-summary(model_full)
 
-
-# Use informative priors based on malaria literature
-# This prevents the model from wandering into implausible territory
-
-formula_full_informed <- n_positive ~ 1 +
-  mean_rainfall_std +
-  mean_temperature_std +
-  NDVI_std +
-  dist_to_water_km_std +
-  prop_wetland_std +
-  prop_cropland_std +
-  prop_built_std +
-  f(district_id,
-    model       = "besag",
-    graph       = "study_area_adj.graph",
-    scale.model = TRUE,
-    constr      = TRUE,
-    hyper       = list(
-      prec = list(prior = "pc.prec", param = c(1, 0.01))
-    )
-  ) +
-  f(district_id_unstr,
-    model = "iid",
-    hyper = list(
-      prec = list(prior = "pc.prec", param = c(1, 0.01))
-    )
-  )
-
-# Tighter priors on fixed effects
-model_full_informed <- inla(
-  formula_full_informed,
-  family            = "binomial",
-  Ntrials           = model_data$n_examined,
-  data              = model_data,
-  control.fixed     = list(
-    mean.intercept = 0,
-    prec.intercept = 1,     # tighter prior on intercept
-    mean           = 0,
-    prec           = 1      # tighter prior on all coefficients
-                            # equivalent to SD = 1 on logit scale
+res_vegetation <- inla(
+  formula_vegetation_index,
+  family = "betabinomial",
+  data = inla.stack.data(stk_est_vegetation_index),
+  Ntrials = inla.stack.data(stk_est_vegetation_index)$Ntrials,
+  control.predictor = list(
+    A = inla.stack.A(stk_est_vegetation_index),
+    compute = TRUE
   ),
-  control.predictor = list(compute = TRUE, link = 1),
-  control.compute   = list(dic = TRUE, waic = TRUE, cpo = TRUE)
+  control.fixed = list(
+    mean = 0,
+    prec = 0.2
+  ),
+  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE)
 )
 
-summary(model_full_informed)
+```
 
+```{r}
+idx_est <- inla.stack.index(stk_est_vegetation_index, "est")$data
+
+fitted_est <- res_vegetation$summary.fitted.values[idx_est, "mean"]
+
+df_resid <- as.data.frame(cbind(
+  observed = sampled_data_join_sf$pr,
+  fitted   = fitted_est
+))
+
+sampled_data_join_sf$resid <- (df_resid$observed - df_resid$fitted) / sqrt(df_resid$fitted * (1 - df_resid$fitted) / sampled_data_join_sf$examined)
+
+coords <- st_coordinates(sampled_data_join_sf)
+
+nb <- dnearneigh(coords, d1 = 0, d2 = 50000)   # 100 km neighbours
+lw <- nb2listw(nb, style = "W", zero.policy = TRUE)
+
+moran.test(sampled_data_join_sf$resid,
+           lw,
+           alternative = "two.sided",
+           zero.policy = TRUE)
+
+plot(df_resid$observed, df_resid$fitted,
+       xlab = "Observed prevalence",
+       ylab = "Fitted prevalence")
+  abline(0, 1, col = "red")
 ```
 
 
 ```{r}
-#extract the result of the full informed model
+for (var in vars_to_scale) {
+  mean_val <- scaling_stats[[var]]["mean"]
+  sd_val   <- scaling_stats[[var]]["sd"]
+  
+  grid_sf_africa[[var]] <- (grid_sf_africa[[var]] - mean_val) / sd_val
+}
 
-# Extract fitted values
-model_data$prev_mean  <- model_full_informed$summary.fitted.values$mean
-model_data$prev_lower <- model_full_informed$summary.fitted.values$`0.025quant`
-model_data$prev_upper <- model_full_informed$summary.fitted.values$`0.975quant`
-model_data$ci_width   <- model_data$prev_upper - model_data$prev_lower
 
-# Check observed vs fitted for observed districts
-model_data %>%
-  filter(district_type == "Observed") %>%
-  mutate(
-    raw_prev    = round(n_positive / n_examined, 3),
-    fitted_prev = round(prev_mean, 3),
-    lower       = round(prev_lower, 3),
-    upper       = round(prev_upper, 3)
-  ) %>%
-  dplyr::select(Admin2, raw_prev, fitted_prev, lower, upper)
+n_tiles <- 100
+tile_id <- cut(seq_len(nrow(grid_sf_africa)),
+               breaks = n_tiles,
+               labels = FALSE)
 
-model_data %>%
-  filter(district_type == "Neighbor") %>%
-  mutate(
-    fitted_prev = round(prev_mean,  3),
-    lower       = round(prev_lower, 3),
-    upper       = round(prev_upper, 3),
-    ci_width    = round(ci_width,   3)
-  ) %>%
-  dplyr::select(Admin2, component, fitted_prev,
-                lower, upper, ci_width) %>%
-  arrange(component, desc(fitted_prev))
+pred_mean <- numeric(nrow(grid_sf_africa))
+pred_sd   <- numeric(nrow(grid_sf_africa))
+pred_q05  <- numeric(nrow(grid_sf_africa))
+pred_q95  <- numeric(nrow(grid_sf_africa))
 
-# map the result
+for(tile in seq_len(n_tiles)){
+  cat("Tile", tile, "of", n_tiles, "\n")
 
-# Merge results to spatial object
-study_area_results <- study_area_sf %>%
-  left_join(
-    model_data %>% dplyr::select(district_id, prev_mean,
-                                  prev_lower, prev_upper, ci_width),
-    by = "district_id"
+  idx <- which(tile_id == tile)
+  grid_tile <- grid_sf_africa[idx, ]
+
+  A_pred <- inla.spde.make.A(
+    mesh = mesh_Africa,
+    loc = st_coordinates(grid_tile)
   )
 
-# Map 1 — Posterior mean prevalence
-ggplot() +
-  geom_sf(data = districts_cmr, fill = "grey95", color = "grey80") +
-  geom_sf(
-    data  = study_area_results,
-    aes(fill = prev_mean),
-    color = "grey40"
-  ) +
-  scale_fill_viridis_c(
-    name   = "Prevalence",
-    option = "magma",
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  labs(
-    title    = "Estimated Malaria Prevalence",
-    subtitle = "BYM2 with informative priors — Cameroon 2011"
-  ) +
-  theme_minimal()
+  effects_pred <- data.frame(
+    intercept                    = 1,
+    annual_rainfall_2021         = grid_tile$annual_rainfall_2021,
+    annual_temperature_2021      = grid_tile$annual_temperature_2021,
+    elevation                    = grid_tile$elevation,
+    vegetation_index             = grid_tile$vegetation_index,
+    pop_density_2020             = grid_tile$pop_density_2020,
+    dist_to_water                = grid_tile$dist_to_water,
+    lc_water                     = grid_tile$lc_water,
+    lc_built                     = grid_tile$lc_built,
+    lc_cropland                  = grid_tile$lc_cropland,
+    lc_wetland                   = grid_tile$lc_wetland,
+    annual_ITN_usage_2021        = grid_tile$annual_ITN_usage_2021
+    )
 
-# Map 2 — Uncertainty
-ggplot() +
-  geom_sf(data = districts_cmr, fill = "grey95", color = "grey80") +
-  geom_sf(
-    data  = study_area_results,
-    aes(fill = ci_width),
-    color = "grey40"
-  ) +
-  scale_fill_viridis_c(
-    name   = "CI Width",
-    option = "rocket",
-    labels = scales::percent_format(accuracy = 1)
-  ) +
-  labs(
-    title    = "Model Uncertainty",
-    subtitle = "Width of 95% Credible Interval"
-  ) +
-  theme_minimal()
+  stk_pred <- inla.stack(
+    data = list(y = NA, Ntrials = NA),
+    A = list(A_pred, 1),
+    effects = list(
+      spatial = 1:spde_Africa$n.spde,
+      effects_pred
+    ),
+    tag = "pred"
+  )
 
+  stk_full <- inla.stack(stk_est_vegetation_index, stk_pred)
+
+  res_tile <- inla(
+    formula_vegetation_index,
+    family = "betabinomial",
+    data = inla.stack.data(stk_full),
+    Ntrials = inla.stack.data(stk_full)$Ntrials,
+
+    control.predictor = list(
+      A = inla.stack.A(stk_full),
+      compute = TRUE,
+      link = 1
+    ),
+
+    control.mode = list(
+      theta = res_vegetation$mode$theta,
+      restart = FALSE
+    ),
+
+    control.compute = list(config = TRUE)
+  )
+
+  pred_idx <- inla.stack.index(stk_full, "pred")$data
+
+  eta_mat <- inla.posterior.sample.eval(
+    function() APredictor[pred_idx],
+    inla.posterior.sample(200, res_tile)
+  )
+
+  prob_mat <- plogis(eta_mat)
+
+  pred_mean[idx] <- rowMeans(prob_mat)
+  pred_sd[idx]   <- apply(prob_mat, 1, sd)
+  pred_q05[idx]  <- apply(prob_mat, 1, quantile, 0.05)
+  pred_q95[idx]  <- apply(prob_mat, 1, quantile, 0.95)
+
+  gc()
+}
+
+grid_sf_africa$pred_mean <- pred_mean
+grid_sf_africa$pred_sd   <- pred_sd
+grid_sf_africa$pred_q05  <- pred_q05
+grid_sf_africa$pred_q95  <- pred_q95
 ```
 
-# Extract the modelled prevalence from MAP
 
 ```{r}
-available_rasters <- listRaster()
-print(available_rasters)
+grid_vect <- vect(grid_sf_africa)
 
-available_rasters[grep("Pf|falciparum|PR", 
-                        available_rasters$dataset_id,
-                        ignore.case = TRUE), ]
-
-# Get Cameroon shapefile
-cmr_shp <- getShp(ISO = "CMR", admin_level = "admin0")
-
-# Download MAP PfPR surface using correct dataset_id
-map_raster <- getRaster(
-  dataset_id = "Malaria__202206_Global_Pf_Parasite_Rate",
-  shp        = cmr_shp,
-  year       = 2011
-)
+global_spatial_limit <- rast("data/Africa_data/spatial_limit_of_transmission/2010_Pf_Limits_Decompressed.geotiff")
 
 
-plot(map_raster, main = "MAP PfPR2-10 — Cameroon 2011")
+################################################################################
+#        Rasterize the prediction grid for an easy visualization
+################################################################################
 
-# Extract MAP prevalence per study area district
-map_extracted <- extract(
-  map_raster,
-  vect(study_area_sf),
-  fun   = "mean",
-  na.rm = TRUE
-)
+limit_3857 <- project(global_spatial_limit, "EPSG:3857", method = "near")
+limit_3857 <- crop(limit_3857, vect(shp_africa))
+limit_3857 <- mask(limit_3857, vect(shp_africa))
 
-model_data$map_prev <- map_extracted[, 2]
+grid_limit <- terra::extract(limit_3857, grid_vect)
 
-# Compare
-comparison <- model_data %>%
-  dplyr::select(Admin2, district_type,
-                prev_mean, prev_lower, prev_upper,
-                map_prev) %>%
+grid_sf_africa$limit <- grid_limit[,2]
+
+
+grid_sf_africa$limit[is.na(grid_sf_africa$limit)] <- 0
+
+
+grid_sf_africa_mask_unstable <- grid_sf_africa |>
   mutate(
-    prev_mean  = round(prev_mean, 3),
-    map_prev   = round(map_prev,  3),
-    difference = round(prev_mean - map_prev, 3),
-    map_within_ci = map_prev >= prev_lower &
-                    map_prev <= prev_upper
+    pred_mean = ifelse(limit == 0, NA, pred_mean),
+    pred_sd   = ifelse(limit == 0, NA, pred_sd),
+    pred_q05  = ifelse(limit == 0, NA, pred_q05),
+    pred_q95  = ifelse(limit == 0, NA, pred_q95)
   )
 
+grid_sf_africa_mask_stable <- grid_sf_africa |>
+  mutate(
+    pred_mean = ifelse(limit %in% c(0,1), NA, pred_mean),
+    pred_sd   = ifelse(limit %in% c(0,1), NA, pred_sd),
+    pred_q05  = ifelse(limit %in% c(0,1), NA, pred_q05),
+    pred_q95  = ifelse(limit %in% c(0,1), NA, pred_q95)
+  )
+
+v1 <- vect(grid_sf_africa_mask_unstable)
+
+template <- rast(
+  ext = ext(v1),
+  resolution = 5000,
+  crs = crs(v1)
+)
+
+
+grid_sf_africa_mask_unstable_raster <- rasterize(
+  v1,
+  template,
+  field = c("pred_mean", "pred_q05", "pred_q95")
+)
+
+v1 <- vect(grid_sf_africa_mask_stable)
+
+template <- rast(
+  ext = ext(v1),
+  resolution = 5000,
+  crs = crs(v1)
+)
+
+grid_sf_africa_mask_stable_raster <- rasterize(
+  v1,
+  template,
+  field = c("pred_mean", "pred_q05", "pred_q95")
+)
+
+
+################################################################################
+#                                   End                                        #
+################################################################################
+
+
+shp_africa_country <- shp_africa %>%
+  group_by(country) %>%
+  summarise(geometry = st_union(geometry))
+
+
+Africa_prev_1 <- ggplot(shp_africa) +
+  geom_spatraster(data = grid_sf_africa_mask_unstable_raster,
+                  mapping = aes(fill = pred_mean))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "annual prevalence of P. f")+
+  theme_void()+
+  labs(title = "annual prevalence of P. f in 2021 using MAP data")
+  
+
+ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_admin2_level_unstable_bench.pdf",
+       plot = Africa_prev_1, width = 6, height = 4, dpi = 300)
+
+Africa_prev_country_1 <- ggplot(shp_africa_country) +
+  geom_spatraster(data = grid_sf_africa_mask_unstable_raster,
+                  mapping = aes(fill = pred_mean))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "annual prevalence of P. f")+
+  theme_void()+
+  labs(title = "annual prevalence of P. f in 2021 using MAP data")
+
+ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_country_level_unstable_bench.pdf",
+       plot = Africa_prev_country_1, width = 6, height = 4, dpi = 300)
+
+grid_sf_africa_mask_unstable_raster$CI_width <- grid_sf_africa_mask_unstable_raster$pred_q95 - grid_sf_africa_mask_unstable_raster$pred_q05
+
+Africa_prev_country_uncertainty <- ggplot(shp_africa_country) +
+  geom_spatraster(data = grid_sf_africa_mask_unstable_raster,
+                  mapping = aes(fill = CI_width))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "Credible intervale width\n of the estimated prevalence")+
+  theme_void()+
+  labs(title = "Associated uncertainty to the \n annual prevalence of P. f in 2021 using MAP data")
+
+
+ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_uncertainty_bench.pdf",
+       plot = Africa_prev_country_uncertainty, width = 6, height = 4, dpi = 300)
+
+
+# setting unstable areas to 0
+
+Africa_prev_2 <- ggplot(shp_africa) +
+  geom_spatraster(data = grid_sf_africa_mask_stable_raster,
+                  mapping = aes(fill = pred_mean))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "annual prevalence of P. f")+
+  theme_void()+
+  labs(title = "annual prevalence of P. f in 2021 using MAP data")
+
+ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_admin2_level_bench.pdf",
+       plot = Africa_prev_2, width = 6, height = 4, dpi = 300)
+
+Africa_prev_country_2 <- ggplot(shp_africa_country) +
+  geom_spatraster(data = grid_sf_africa_mask_stable_raster,
+                  mapping = aes(fill = pred_mean))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "annual prevalence of P. f")+
+  theme_void()+
+  labs(title = "annual prevalence of P. f in 2021 using MAP data")
+
+ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_country_level_bench.pdf",
+       plot = Africa_prev_country_2, width = 6, height = 4, dpi = 300)
+
+
 ```
+
+```{r}
+pfpr_2021 <- rast("data/prevalence_2000/2025_GBD2024_Global_PfPR_2021.tif") 
+
+shp_africa_country_4326 <- shp_africa_country %>% st_transform(4326)
+
+vect_africa1 <- vect(shp_africa_country_4326)
+
+africa_map_pr_2021 <- crop(pfpr_2021, vect_africa1)
+africa_map_pr_2021 <- mask(africa_map_pr_2021, vect_africa1)
+
+africa_map_pr_2021_3857 <- project(africa_map_pr_2021, "EPSG:3857", method = "bilinear")
+africa_map_pr_2021_3857_1 <- africa_map_pr_2021_3857[[1]]
+
+names(africa_map_pr_2021_3857_1) <- "PfPR_2_10"
+
+
+vect_grid_africa <- vect(grid_sf_africa)
+
+grid_map_pr <- terra::extract(africa_map_pr_2021_3857, vect_grid_africa)
+
+grid_map_pr <- grid_map_pr %>% select(-`Mask: Sparsely Populated`)
+
+grid_sf_africa1 <- grid_sf_africa %>%
+  mutate(PfPR_2_10   = grid_map_pr[,2],
+         PfPR_2_10_L = grid_map_pr[,3],
+         PfPR_2_10_U = grid_map_pr[,4]) %>% 
+  select(-c(annual_rainfall_2021, annual_temperature_2021, annual_ITN_usage_2021,
+            vegetation_index, elevation, dist_to_water, lc_trees, lc_water,
+            lc_wetland, lc_cropland, pop_density_2020, lc_built))
+
+numeric_cols <- names(grid_sf_africa1)[sapply(grid_sf_africa1, is.numeric)]
+
+for (col in numeric_cols) {
+  grid_sf_africa1 <- fill_by_nearest(grid_sf_africa1, col)
+}
+
+
+# Conversion of the prevalence to all age group
+
+n <- nrow(grid_sf_africa1)
+
+grid_sf_africa1$PR_all_age <- mapply(
+  convertPrevalence,
+  prev         = grid_sf_africa1$PfPR_2_10,
+  age_min_in   = rep(2, n),
+  age_max_in   = rep(10, n),
+  age_min_out  = rep(0, n),
+  age_max_out  = rep(100, n),
+  parameters   = "Pf_Smith2007"
+)
+
+grid_sf_africa1$PR_all_age_U <- mapply(
+  convertPrevalence,
+  prev         = grid_sf_africa1$PfPR_2_10_U,
+  age_min_in   = rep(2, n),
+  age_max_in   = rep(10, n),
+  age_min_out  = rep(0, n),
+  age_max_out  = rep(99, n),
+  parameters   = "Pf_Smith2007")
+
+grid_sf_africa1$PR_all_age_L <- mapply(
+  convertPrevalence,
+  prev         = grid_sf_africa1$PfPR_2_10_L,
+  age_min_in   = rep(2, n),
+  age_max_in   = rep(10, n),
+  age_min_out  = rep(0, n),
+  age_max_out  = rep(99, n),
+  parameters   = "Pf_Smith2007")
+  
+```
+

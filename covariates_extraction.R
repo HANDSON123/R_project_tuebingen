@@ -587,6 +587,448 @@ cluster_data_cmr_sf <- cluster_data_cmr_sf %>%
 
 st_write(cluster_data_cmr_sf, "data/cmr_data/cmr_cluster_df_1_sf.gpkg", append = FALSE)
 
+
+####################### Cameroon case benchmark ################################
+
+map_2011_cmr <- st_read("data/cmr_data/cmr_MAP_full_raw_prevalence_2011.csv")
+
+map_2011_cmr_sf <- st_as_sf(map_2011_cmr, coords = c("longitude", "latitude"), crs = 4326)
+
+
+path3 <- "data/cmr_data/chirps_2011/CHIRPS_PENTAD_precipitation_2011-01-01_2011-12-31_-5p8264to13p9448N_0p6930to19p1696E.precipitation.tif"
+path4 <- "data/cmr_data/ERA5_temperature/ERA5_LAND_DAILY_temperature_2m_2011-01-01_2011-12-31_-5p4765to13p9448N_0p6930to19p3454E.temperature_2m.tif"
+ndvi_path <- "data/cmr_data/NDVI2011/"
+# Load all 12 monthly NDVI tif files
+ndvi_files <- list.files(
+  ndvi_path,
+  pattern    = "_1_km_monthly_NDVI.*\\.tif$",
+  full.names = TRUE
+)
+
+cmr_ndvi_stack<- rast(ndvi_files)
+
+
+cmr_pop <- rast("data/cmr_data/cmr_pd_2011_1km_UNadj.tif")
+cmr_rainfall_2011 <- rast(path3)
+cmr_temperature_2011 <- rast(path4)
+elevation_cmr <- rast("data/cmr_data/elevation/cmr_elv_msk.tif")
+land_cover_water <- rast("data/ben_data/landuse/WorldCover_water_30s.tif")
+land_cover_trees <- rast("data/ben_data/landuse/WorldCover_trees_30s.tif")
+land_cover_builts <- rast("data/ben_data/landuse/WorldCover_built_30s.tif")
+land_cover_cropland <- rast("data/ben_data/landuse/WorldCover_cropland_30s.tif")
+land_cover_wetland <- rast("data/ben_data/landuse/WorldCover_wetland_30s.tif")
+cmr_ITN_2011  <- rast("data/ITN_2000/2025_GBD2024_Africa_ITN_2011.tif")
+cmr_ITN_2011  <- rast("data/ITN_2000_2/2026_GBD2025_Africa_ITN_Use_Rate_2011.tif")
+cmr_IRS_2011  <- rast("data/IRS_2000/2025_GBD2024_Africa_IRS_2011.tif")
+cmr_effective_treat_2011 <- rast("data/Effective_treat_2000_2025/2026_GBD2025_Global_Antimalarial_EFT_2011.tif")
+
+cmr_pop  <- crop(cmr_pop,  cmr_vect)
+cmr_pop  <- mask(cmr_pop,  cmr_vect)
+
+cmr_rainfall_2011 <- crop(cmr_rainfall_2011, cmr_vect)
+cmr_rainfall_2011 <- mask(cmr_rainfall_2011, cmr_vect)
+
+cmr_temperature_2011 <- crop(cmr_temperature_2011, cmr_vect)
+cmr_temperature_2011 <- mask(cmr_temperature_2011, cmr_vect)
+
+cmr_ndvi_stack <- crop(cmr_ndvi_stack, cmr_vect)
+cmr_ndvi_stack <- mask(cmr_ndvi_stack, cmr_vect)
+
+elevation_cmr   <- crop(elevation_cmr, cmr_vect)
+elevation_cmr   <- mask(elevation_cmr, cmr_vect)
+
+cmr_land_cover_water     <- crop(land_cover_water, cmr_vect)
+cmr_land_cover_water     <- mask(cmr_land_cover_water, cmr_vect)
+
+cmr_land_cover_built     <- crop(land_cover_builts, cmr_vect)
+cmr_land_cover_built     <- mask(cmr_land_cover_built, cmr_vect)
+
+cmr_land_cover_cropland  <- crop(land_cover_cropland, cmr_vect)
+cmr_land_cover_cropland  <- mask(cmr_land_cover_cropland, cmr_vect)
+
+cmr_land_cover_trees     <- crop(land_cover_trees, cmr_vect)
+cmr_land_cover_trees     <- mask(cmr_land_cover_trees, cmr_vect)
+
+cmr_land_cover_wetland   <- crop(land_cover_wetland, cmr_vect)
+cmr_land_cover_wetland   <- mask(cmr_land_cover_wetland, cmr_vect)
+
+cmr_ITN_2011   <- crop(cmr_ITN_2011, cmr_vect)
+cmr_ITN_2011   <- mask(cmr_ITN_2011, cmr_vect)
+
+cmr_IRS_2011   <- crop(cmr_IRS_2011, cmr_vect)
+cmr_IRS_2011   <- mask(cmr_IRS_2011, cmr_vect)
+
+cmr_effective_treat_2011   <- crop(cmr_effective_treat_2011, cmr_vect)
+cmr_effective_treat_2011   <- mask(cmr_effective_treat_2011, cmr_vect)
+
+cmr_pop_density_2011_df <- terra::extract(cmr_pop,  map_2011_cmr_sf)
+cmr_rainfall_2011_df    <- terra::extract(cmr_rainfall_2011, map_2011_cmr_sf)
+cmr_temperature_2011_df <- terra::extract(cmr_temperature_2011, map_2011_cmr_sf)
+ndvi_vals_cmr_monthly <- terra::extract(cmr_ndvi_stack, map_2011_cmr_sf)
+ndvi_mean_cmr <- apply(ndvi_vals_cmr_monthly[,-1], 1, mean, na.rm = TRUE)
+elevation_cmr_df <- terra::extract(elevation_cmr, map_2011_cmr_sf)
+cmr_land_cover_water_df <- terra::extract(cmr_land_cover_water, map_2011_cmr_sf)
+cmr_land_cover_built_df <- terra::extract(cmr_land_cover_built, map_2011_cmr_sf)
+cmr_land_cover_cropland_df <- terra::extract(cmr_land_cover_cropland, map_2011_cmr_sf)
+cmr_land_cover_trees_df <- terra::extract(cmr_land_cover_trees, map_2011_cmr_sf)
+cmr_land_cover_wetland_df <- terra::extract(cmr_land_cover_wetland, map_2011_cmr_sf)
+cmr_ITN_2011_df   <- terra::extract(cmr_ITN_2011, map_2011_cmr_sf)
+cmr_IRS_2011_df   <- terra::extract(cmr_IRS_2011, map_2011_cmr_sf)
+cmr_effective_treat_2011_df   <- terra::extract(cmr_effective_treat_2011, map_2011_cmr_sf)
+
+
+# distance to water
+
+bbox <- st_bbox(shp_cmr)
+
+rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
+                  wkt_filter = st_as_text(st_as_sfc(bbox)))
+
+lakes  <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+                  wkt_filter = st_as_text(st_as_sfc(bbox)))
+
+
+rivers_valid <- st_make_valid(rivers)
+lakes_valid  <- st_make_valid(lakes)
+
+rivers_valid <- ms_simplify(rivers_valid, keep = 0.3, keep_shapes = TRUE)
+lakes_valid  <- ms_simplify(lakes_valid,  keep = 0.3, keep_shapes = TRUE)
+
+
+# nearest river segment for each point
+nn_riv <- st_nn(map_2011_cmr_sf, rivers_valid, k = 1, returnDist = TRUE)
+dist_riv_min <- sapply(nn_riv$dist, `[`, 1)
+
+# nearest lake polygon for each point
+nn_lake <- st_nn(map_2011_cmr_sf, lakes_valid, k = 1, returnDist = TRUE)
+dist_lake_min <- sapply(nn_lake$dist, `[`, 1)
+
+
+map_2011_cmr_sf$dist_to_water <- pmin(dist_riv_min, dist_lake_min)
+
+
+cmr_pf_data_2011 <- map_2011_cmr_sf %>% 
+  dplyr::select(site_id, lower_age, upper_age, examined, positive, pr, species, dist_to_water) %>% 
+  mutate(pop_density = cmr_pop_density_2011_df[,2],
+         rainfall = cmr_rainfall_2011_df[,2],
+         temperature = cmr_temperature_2011_df[,2],
+         elevation = elevation_cmr_df[,2],
+         vegetation_index = ndvi_mean_cmr,
+         landcover_water = cmr_land_cover_water_df[,2],
+         landcover_trees = cmr_land_cover_trees_df[,2],
+         landcover_builts = cmr_land_cover_built_df[,2],
+         landcover_cropland = cmr_land_cover_cropland_df[,2],
+         landcover_wetland = cmr_land_cover_wetland_df[,2],
+         ITN_2011         = cmr_ITN_2011_df[,2],
+         effective_treat  = cmr_effective_treat_2011_df[,2]) %>% 
+  filter(species == "P. falciparum")
+
+
+numeric_cols <- names(cmr_pf_data_2011)[sapply(cmr_pf_data_2011, is.numeric)]
+
+for (col in numeric_cols) {
+  cmr_pf_data_2011 <- fill_by_nearest(cmr_pf_data_2011, col)
+}
+
+st_write(cmr_pf_data_2011, 
+         "data/cmr_data/benchmarking_spatial_data_cmr_sf.gpkg", append = FALSE)
+
+
+################ Prediction grid for benchmark exercise Cameroon ###############
+
+# resolution in meters (5000 m = 5 km)
+res <- 5000  
+
+box_cmr <- st_bbox(shp_cmr %>% st_transform(3857)) %>% st_as_sfc()
+# Create grid covering bounding box of Cameroon
+grid <- st_make_grid(
+  box_cmr,
+  cellsize = res,
+  what = "centers"
+)
+
+grid <- st_sf(geometry = grid)
+
+# Keep only grid points inside Cameroon
+grid <- st_intersection(grid, shp_cmr%>% st_transform(3857))
+
+cmr_vect <- vect(grid %>% st_transform(4326))
+
+# grid_ITN_usage_2021  <- project(ITN_intervention_2021,  st_crs(grid)$wkt)
+grid_pop  <- crop(cmr_pop,  cmr_vect)
+grid_pop  <- mask(cmr_pop,  cmr_vect)
+
+grid_rainfall_2021 <- crop(cmr_rainfall_2011, cmr_vect)
+grid_rainfall_2021 <- mask(cmr_rainfall_2011, cmr_vect)
+
+grid_temperature_2021 <- crop(cmr_temperature_2011, cmr_vect)
+grid_temperature_2021 <- mask(cmr_temperature_2011, cmr_vect)
+
+grid_ndvi_stack <- crop(cmr_ndvi_stack, cmr_vect)
+grid_ndvi_stack <- mask(cmr_ndvi_stack, cmr_vect)
+
+elevation_grid   <- crop(elevation_cmr, cmr_vect)
+elevation_grid   <- mask(elevation_cmr, cmr_vect)
+
+grid_land_cover_water   <- crop(land_cover_water, cmr_vect)
+grid_land_cover_water   <- mask(grid_land_cover_water, cmr_vect)
+
+grid_land_cover_built   <- crop(land_cover_builts, cmr_vect)
+grid_land_cover_built   <- mask(grid_land_cover_built, cmr_vect)
+
+grid_land_cover_cropland   <- crop(land_cover_cropland, cmr_vect)
+grid_land_cover_cropland   <- mask(grid_land_cover_cropland, cmr_vect)
+
+grid_land_cover_trees   <- crop(land_cover_trees, cmr_vect)
+grid_land_cover_trees   <- mask(grid_land_cover_trees, cmr_vect)
+
+grid_land_cover_wetland   <- crop(land_cover_wetland, cmr_vect)
+grid_land_cover_wetland   <- mask(grid_land_cover_wetland, cmr_vect)
+
+grid_ITN   <- crop(cmr_ITN_2011, cmr_vect)
+grid_ITN   <- mask(grid_ITN, cmr_vect)
+
+grid_IRS   <- crop(cmr_IRS_2011, cmr_vect)
+grid_IRS   <- mask(grid_IRS, cmr_vect)
+
+grid_effective_treat   <- crop(cmr_effective_treat_2011, cmr_vect)
+grid_effective_treat   <- mask(grid_effective_treat, cmr_vect)
+
+
+# grid_ITN_usage_2021_df <- terra::extract(grid_ITN_usage_2021,  grid)
+grid_pop_density_2020_df <- terra::extract(grid_pop,  cmr_vect)
+grid_rainfall_2021_df    <- terra::extract(grid_rainfall_2021, cmr_vect)
+grid_temperature_2021_df <- terra::extract(grid_temperature_2021, cmr_vect)
+ndvi_vals_grid_monthly <- terra::extract(grid_ndvi_stack, cmr_vect)
+ndvi_mean_grid <- apply(ndvi_vals_grid_monthly[,-1], 1, mean, na.rm = TRUE)
+elevation_grid_df <- terra::extract(elevation_grid, cmr_vect)
+grid_land_cover_water_df <- terra::extract(grid_land_cover_water, cmr_vect)
+grid_land_cover_built_df <- terra::extract(grid_land_cover_built, cmr_vect)
+grid_land_cover_cropland_df <- terra::extract(grid_land_cover_cropland, cmr_vect)
+grid_land_cover_trees_df <- terra::extract(grid_land_cover_trees, cmr_vect)
+grid_land_cover_wetland_df <- terra::extract(grid_land_cover_wetland, cmr_vect)
+grid_ITN_df                <- terra::extract(grid_ITN, cmr_vect)
+grid_effective_treat_df    <- terra::extract(grid_effective_treat, cmr_vect)
+
+
+# nearest river segment for each point
+
+bbox <- st_bbox(grid %>% st_transform(4326))
+
+rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
+                  wkt_filter = st_as_text(st_as_sfc(bbox)))
+
+lakes  <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+                  wkt_filter = st_as_text(st_as_sfc(bbox)))
+
+
+rivers_valid <- st_make_valid(rivers)
+lakes_valid  <- st_make_valid(lakes)
+
+rivers_valid <- ms_simplify(rivers_valid, keep = 0.3, keep_shapes = TRUE)
+lakes_valid  <- ms_simplify(lakes_valid,  keep = 0.3, keep_shapes = TRUE)
+
+rivers_valid <- rivers_valid %>%  st_transform(3857)
+lakes_valid <- lakes_valid %>% st_transform(3857)
+
+nn_riv <- st_nn(grid, rivers_valid, k = 1, returnDist = TRUE)
+dist_riv_min <- sapply(nn_riv$dist, `[`, 1)
+
+# nearest lake polygon for each point
+nn_lake <- st_nn(grid, lakes_valid, k = 1, returnDist = TRUE)
+dist_lake_min <- sapply(nn_lake$dist, `[`, 1)
+
+
+grid$dist_to_water <- pmin(dist_riv_min, dist_lake_min)
+
+grid <- grid %>% 
+  mutate(rainfall            = grid_rainfall_2021_df[,2],
+         temperature         = grid_temperature_2021_df[,2],
+         pop_density         = grid_pop_density_2020_df[,2],
+         elevation           = elevation_grid_df[,2],
+         vegetation_index    = ndvi_mean_grid,
+         landcover_cropland  = grid_land_cover_cropland_df[,2],
+         landcover_water     = grid_land_cover_water_df[,2],
+         landcover_wetland   = grid_land_cover_wetland_df[,2],
+         landcover_builts    = grid_land_cover_built_df[,2],
+         landcover_trees     = grid_land_cover_trees_df[,2],
+         ITN_2011            = grid_ITN_df[,2],
+         effective_treat     = grid_effective_treat_df[,2]) 
+
+numeric_cols <- names(grid)[sapply(grid, is.numeric)]
+
+for (col in numeric_cols) {
+  grid <- fill_by_nearest(grid, col)
+}
+
+st_write(grid, "data/cmr_data/cmr_map_grid.gpkg", append = FALSE)
+
+
+############ Prediction grid at the continental level benchmarking #############
+
+africa_pf_PR_with_coord_join_2021 <- read.csv("data/Africa_data/africa_MAP_full_raw_prevalence_2021.csv")
+
+africa_pf_PR_with_coord_join_2021_sf <- st_as_sf(africa_pf_PR_with_coord_join_2021,
+                                                 coords = c("longitude", "latitude"),
+                                                 crs = 4326)
+
+shp_africa <- st_read("data/Africa_data/shp_africa/Africa_simplified.shp") 
+
+ndvi_path <- "data/Africa_data/NDVI_africa/"
+# Load all 12 monthly NDVI tif files
+ndvi_files <- list.files(
+  ndvi_path,
+  pattern    = "_1_km_monthly_NDVI.*\\.tif$",
+  full.names = TRUE
+)
+
+path1 <- "data/Africa_data/climateEngine_download.precipitation.tif"
+path2 <- "data/Africa_data/ERA5_LAND_DAILY_temperature_2m_2021-01-01_2021-12-31_-39p5213to41p4698N_-22p2966to54p0315E.temperature_2m.tif"
+
+
+ITN_intervention_2021 <- rast("data/ITN_2000/2025_GBD2024_Africa_ITN_2021.tif")
+africa_rainfall_2021 <- rast(path1)
+africa_temperature_2021 <- rast(path2)
+africa_pop <- rast("data/Africa_data/pop_density/gpw_v4_population_density_rev11_2020_30_sec.tif")
+africa_elevation <- rast("data/Africa_data/elevation/wc2.1_30s_elev.tif")
+africa_ndvi_stack<- rast(ndvi_files)
+
+vect_africa <- vect(shp_africa)
+
+africa_land_cover_water <- crop(land_cover_water, vect_africa)
+africa_land_cover_water <- mask(africa_land_cover_water, vect_africa)
+
+africa_land_cover_built <- crop(land_cover_builts, vect_africa)
+africa_land_cover_built <- mask(africa_land_cover_built, vect_africa)
+
+africa_land_cover_cropland <- crop(land_cover_cropland, vect_africa)
+africa_land_cover_cropland <- mask(africa_land_cover_cropland, vect_africa)
+
+africa_land_cover_trees <- crop(land_cover_trees, vect_africa)
+africa_land_cover_trees <- mask(africa_land_cover_trees, vect_africa)
+
+africa_land_cover_wetland <- crop(land_cover_wetland, vect_africa)
+africa_land_cover_wetland <- mask(africa_land_cover_wetland, vect_africa)
+
+africa_ITN_intervention_2021 <- crop(ITN_intervention_2021, vect_africa)
+africa_ITN_intervention_2021 <- mask(africa_ITN_intervention_2021, vect_africa)
+
+africa_pop_2020 <- crop(africa_pop, vect_africa)
+africa_pop_2020 <- mask(africa_pop_2020, vect_africa)
+
+africa_rainfall_2021 <- crop(africa_rainfall_2021, vect_africa)
+africa_rainfall_2021 <- mask(africa_rainfall_2021, vect_africa)
+
+africa_temperature_2021 <- crop(africa_temperature_2021, vect_africa)
+africa_temperature_2021 <- mask(africa_temperature_2021, vect_africa)
+
+africa_ndvi_stack <- crop(africa_ndvi_stack, vect_africa)
+africa_ndvi_stack <- mask(africa_ndvi_stack, vect_africa)
+
+africa_elevation <- crop(africa_elevation, vect_africa)
+africa_elevation <- mask(africa_elevation, vect_africa)
+
+
+africa_ITN_intervention_2021_df <- terra::extract(africa_ITN_intervention_2021, 
+                                                  africa_pf_PR_with_coord_join_2021_sf)
+africa_pop_density_2020_df <- terra::extract(africa_pop_2020,  
+                                             africa_pf_PR_with_coord_join_2021_sf)
+africa_rainfall_2021_df    <- terra::extract(africa_rainfall_2021, 
+                                             africa_pf_PR_with_coord_join_2021_sf)
+africa_temperature_2021_df <- terra::extract(africa_temperature_2021, 
+                                             africa_pf_PR_with_coord_join_2021_sf)
+
+ndvi_vals_africa_monthly <- terra::extract(africa_ndvi_stack, 
+                                           africa_pf_PR_with_coord_join_2021_sf)
+ndvi_mean_africa <- apply(ndvi_vals_africa_monthly[,-1], 1, mean, na.rm = TRUE)
+
+africa_elevation_df <- terra::extract(africa_elevation,
+                                      africa_pf_PR_with_coord_join_2021_sf)
+africa_land_cover_water_df <- terra::extract(africa_land_cover_water, 
+                                             africa_pf_PR_with_coord_join_2021_sf)
+africa_land_cover_built_df <- terra::extract(africa_land_cover_built,
+                                             africa_pf_PR_with_coord_join_2021_sf)
+africa_land_cover_cropland_df <- terra::extract(africa_land_cover_cropland,
+                                                africa_pf_PR_with_coord_join_2021_sf)
+africa_land_cover_trees_df <- terra::extract(africa_land_cover_trees,
+                                             africa_pf_PR_with_coord_join_2021_sf)
+africa_land_cover_wetland_df <- terra::extract(africa_land_cover_wetland,
+                                               africa_pf_PR_with_coord_join_2021_sf)
+
+shp_africa <- st_make_valid(shp_africa)
+
+shp_africa_summarise <- shp_africa %>% 
+  group_by(continent) %>% 
+  summarise(geometry = st_union(geometry))
+
+# distance to water
+
+rivers <- vect("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp")
+lakes <- vect("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp")
+
+
+r_template <- rast(
+  ext(vect(st_as_sf(shp_africa %>% st_transform(3857)))),
+  resolution = 5000,
+  crs = "EPSG:3857")
+
+rivers3857 <- project(rivers, "EPSG:3857")
+lakes3857 <- project(lakes, "EPSG:3857")
+
+rivers2 <- rivers3857[rivers3857$ORD_STRA >= 3, ]
+
+riv_r <- rasterize(
+  rivers2,
+  r_template,
+  field = 1,
+  background = NA)
+
+
+lake_r <- rasterize(
+  lakes3857,
+  r_template,
+  field = 1,
+  background = NA)
+
+water <- cover(riv_r, lake_r)
+
+dist_water <- distance(
+  water,
+  filename = "data/Africa_data/dist_to_water_5km.tif",
+  overwrite = TRUE)
+
+dist_water <- rast("data/Africa_data/dist_to_water_5km.tif")
+
+africa_pf_PR_with_coord_join_2021_sf$dist_to_water <- terra::extract(
+  dist_water,
+  vect(africa_pf_PR_with_coord_join_2021_sf %>% st_transform(3857)))[,2]
+
+africa_pf_PR_with_coord_join_2021_sf <- africa_pf_PR_with_coord_join_2021_sf %>% 
+  mutate(pop_density_2020 = africa_pop_density_2020_df[,2],
+         annual_rainfall_2021 = africa_rainfall_2021_df[,2],
+         annual_temperature_2021 = africa_temperature_2021_df[,2],
+         vegetation_index = ndvi_mean_africa,
+         elevation = africa_elevation_df[,2],
+         lc_water = africa_land_cover_water_df[,2],
+         lc_built = africa_land_cover_built_df[,2],
+         lc_trees = africa_land_cover_trees_df[,2],
+         lc_wetland = africa_land_cover_wetland_df[,2],
+         lc_cropland = africa_land_cover_cropland_df[,2],
+         annual_ITN_usage_2021 = africa_ITN_intervention_2021_df[,2])
+
+# filling missing values
+numeric_cols <- names(africa_pf_PR_with_coord_join_2021_sf)[sapply(africa_pf_PR_with_coord_join_2021_sf, is.numeric)]
+
+for (col in numeric_cols) {
+  africa_pf_PR_with_coord_join_2021_sf <- fill_by_nearest(africa_pf_PR_with_coord_join_2021_sf, col)
+}
+
+
+
+st_write(africa_pf_PR_with_coord_join_2021_sf, 
+         "data/Africa_data/africa_pf_PR_with_coord_join_2021_sf.gpkg", append = FALSE)
+
+
 ################################################################################
 #                 case of grid cells at country level                          #
 ################################################################################
@@ -800,19 +1242,6 @@ africa_ndvi_stack <- mask(africa_ndvi_stack, vect(shp_africa %>% st_transform(43
 africa_elevation <- crop(africa_elevation, vect(shp_africa %>% st_transform(4326)))
 africa_elevation <- mask(africa_elevation, vect(shp_africa %>% st_transform(4326)))
 
-
-
-# africa_ITN_intervention_2021  <- project(ITN_intervention_2021,  st_crs(grid_sf_africa)$wkt)
-# africa_pop  <- project(africa_pop,  st_crs(grid_sf_africa)$wkt)
-# africa_rainfall_2021 <- project(africa_rainfall_2021, st_crs(grid_sf_africa)$wkt)
-# africa_temperature_2021 <- project(africa_temperature_2021, st_crs(grid_sf_africa)$wkt)
-# africa_ndvi_stack <- project(africa_ndvi_stack, st_crs(grid_sf_africa)$wkt)
-# africa_elevation   <- project(africa_elevation,   st_crs(grid_sf_africa)$wkt)
-# africa_land_cover_water   <- project(africa_land_cover_water,   st_crs(grid_sf_africa)$wkt)
-# africa_land_cover_built   <- project(africa_land_cover_built,   st_crs(grid_sf_africa)$wkt)
-# africa_land_cover_cropland   <- project(africa_land_cover_cropland,   st_crs(grid_sf_africa)$wkt)
-# africa_land_cover_trees   <- project(africa_land_cover_trees,   st_crs(grid_sf_africa)$wkt)
-# africa_land_cover_wetland   <- project(africa_land_cover_wetland,   st_crs(grid_sf_africa)$wkt)
 
 africa_ITN_intervention_2021_df <- terra::extract(africa_ITN_intervention_2021, 
                                                   grid_sf_africa %>% st_transform(4326))
