@@ -1010,3 +1010,730 @@ grid_sf$prev_q975   <- apply(pred_mat, 1, quantile, 0.975)
 # distance to water and slightly adjusted effect sizes, while the key
 # environmental drivers rainfall, wetlands, and urbanization remain
 # robust.
+
+
+################################################################################
+#          Leave-One-Cluster-Out-Cross validation                              #   
+################################################################################
+
+#-----------------------------------------------------------
+# PREPARE DATA
+#-----------------------------------------------------------
+sampled_data_join_sf <- st_read("data/Africa_data/sampled_data_join_sf.gpkg")
+shp_africa <- st_read("data/Africa_data/shp_africa/Africa_simplified.shp") %>% st_transform(3857)
+
+Africa_union <- st_union(shp_africa )
+
+sampled_data_join_sf <- sampled_data_join_sf %>% st_transform(3857)
+
+sampled_data_join_sf_sp     <- as(sampled_data_join_sf, "Spatial")
+Africa_union_sp <- as(Africa_union, "Spatial")
+
+coords_Africa <- coordinates(sampled_data_join_sf_sp)
+sampled_data_join_sf$lon <- coords_Africa[,1]
+sampled_data_join_sf$lat <- coords_Africa[,2]
+#-----------------------------------------------------------
+# BUILD ONE GLOBAL MESH
+#-----------------------------------------------------------
+
+mesh <- inla.mesh.2d(
+  loc      = coords_Africa,
+  boundary = inla.sp2segment(Africa_union_sp),
+  max.edge = c(25e3, 2000e3),   
+  cutoff   = 20e3,
+  offset   = c(100e3, 2000e3))
+
+
+#-----------------------------------------------------------
+# DEFINE SPDE MODEL
+#-----------------------------------------------------------
+
+spde <- inla.spde2.pcmatern(
+  mesh = mesh,
+  prior.range = c(40000, 0.5),
+  prior.sigma = c(0.2, 0.5))
+
+s.index <- inla.spde.make.index(
+  name = "spatial",
+  n.spde = spde$n.spde
+)
+
+#-----------------------------------------------------------
+# DEFINE FOLDS
+#-----------------------------------------------------------
+
+folds <- unique(sampled_data_join_sf$country)
+
+cv_results <- list()
+
+all_predictions <- data.frame()
+
+#-----------------------------------------------------------
+# LEAVE-ONE-COUNTRY-OUT CROSS VALIDATION
+#-----------------------------------------------------------
+
+for(i in seq_along(folds)) {
+  
+  country_out <- folds[i]
+  
+  cat("\n=====================================\n")
+  cat("LEAVING OUT:", country_out, "\n")
+  cat("=====================================\n")
+  
+  train <- sampled_data_join_sf %>%
+    filter(country != country_out)
+  
+  test <- sampled_data_join_sf %>%
+    filter(country == country_out)
+  
+  train <- sf::st_drop_geometry(train)
+  test <- sf::st_drop_geometry(test)
+  #---------------------------------------------------------
+  # PROJECTOR MATRICES
+  #---------------------------------------------------------
+  
+  A_train <- inla.spde.make.A(
+    mesh = mesh,
+    loc = as.matrix(train[, c("lon","lat")])
+  )
+  
+  A_test <- inla.spde.make.A(
+    mesh = mesh,
+    loc = as.matrix(test[, c("lon","lat")])
+  )
+  
+  #---------------------------------------------------------
+  # ESTIMATION STACK
+  #---------------------------------------------------------
+  
+  stack.est <- inla.stack(
+    data = list(
+      y = train$Number_of_infected_tot_pm,
+      Ntrials = train$Number_of_participant_tot
+    ),
+    
+    A = list(
+      A_train,
+      1
+    ),
+    
+    effects = list(
+      spatial = s.index,
+      
+      data.frame(
+        intercept            = 1,
+        annual_rainfall_2021 = train$annual_rainfall_2021,
+        vegetation_index     = train$vegetation_index,
+        # pop_density_2020     = train$pop_density_2020,
+        dist_to_water        = train$dist_to_water,
+        lc_water             = train$lc_water,
+        lc_trees             = train$lc_trees,
+        lc_built             = train$lc_built,
+        lc_cropland          = train$lc_cropland,
+        lc_wetland           = train$lc_wetland
+      )
+    ),
+    
+    tag = "est"
+  )
+  
+  #---------------------------------------------------------
+  # PREDICTION STACK
+  #---------------------------------------------------------
+  
+  stack.pred <- inla.stack(
+    data = list(
+      y = NA,
+      Ntrials = test$Number_of_participant_tot
+    ),
+    
+    A = list(
+      A_test,
+      1
+    ),
+    
+    effects = list(
+      spatial = s.index,
+      
+      data.frame(
+        intercept            = 1,
+        annual_rainfall_2021 = test$annual_rainfall_2021,
+        vegetation_index     = test$vegetation_index,
+        # pop_density_2020     = test$pop_density_2020,
+        dist_to_water        = test$dist_to_water,
+        lc_water             = test$lc_water,
+        lc_trees             = test$lc_trees,
+        lc_built             = test$lc_built,
+        lc_cropland          = test$lc_cropland,
+        lc_wetland           = test$lc_wetland
+      )
+    ),
+    
+    tag = "pred"
+  )
+  
+  #---------------------------------------------------------
+  # COMBINED STACK
+  #---------------------------------------------------------
+  
+  stk <- inla.stack(
+    stack.est,
+    stack.pred
+  )
+  
+  #---------------------------------------------------------
+  # MODEL FORMULA
+  #---------------------------------------------------------
+  
+  formula <-
+    y ~ -1 + intercept +
+    annual_rainfall_2021 +
+    vegetation_index +
+    dist_to_water +
+    lc_water +
+    lc_trees +
+    lc_built +
+    lc_cropland +
+    lc_wetland +
+    f(spatial, model = spde)
+  
+  #---------------------------------------------------------
+  # FIT MODEL
+  #---------------------------------------------------------
+  
+  fit <- inla(
+    formula,
+    family = "betabinomial",
+    data = inla.stack.data(stk),
+    
+    Ntrials = inla.stack.data(stk)$Ntrials,
+    
+    control.predictor = list(
+      A = inla.stack.A(stk),
+      compute = TRUE
+    ),
+    control.fixed = list(
+      mean.intercept = -3,
+      prec.intercept = 0.8,
+      mean = 0,
+      prec = 0.2
+    ),
+    control.compute = list(
+      dic = TRUE,
+      waic = TRUE,
+      cpo = TRUE,
+      config = TRUE
+    )
+  )
+  
+  
+  #=========================================================
+  # POSTERIOR SAMPLES
+  #=========================================================
+  
+  samples <- inla.posterior.sample(
+    n = 200,
+    result = fit
+  )
+  
+  #=========================================================
+  # PREDICTIONS
+  #=========================================================
+  
+  idx.pred <- inla.stack.index(stk,"pred")$data
+  
+  
+  eta_mat <- inla.posterior.sample.eval(
+    function() APredictor[idx.pred],
+    inla.posterior.sample(200, fit)
+  )
+  
+  prob_mat <- plogis(eta_mat)
+  
+  pred_mean    <- rowMeans(prob_mat)
+  pred_sd      <- apply(prob_mat, 1, sd)
+  pred_lower   <- apply(prob_mat, 1, quantile, 0.025)
+  pred_upper   <- apply(prob_mat, 1, quantile, 0.975)
+  pred_median  <- apply(prob_mat, 1, median)
+  
+  
+  obs_prev <- test$PR_Pm_tot 
+  
+  #---------------------------------------------------------
+  # PERFORMANCE METRICS
+  #---------------------------------------------------------
+  
+  rmse <- sqrt(
+    mean(
+      (obs_prev - pred_mean)^2,
+      na.rm = TRUE
+    )
+  )
+  
+  mae <- mean(
+    abs(obs_prev - pred_mean),
+    na.rm = TRUE
+  )
+  
+  bias <- mean(
+    pred_mean - obs_prev,
+    na.rm = TRUE
+  )
+  
+  cor_val <- cor(
+    obs_prev,
+    pred_mean,
+    use = "complete.obs"
+  )
+  
+  coverage <- mean(
+    obs_prev >= pred_lower &
+      obs_prev <= pred_upper,
+    na.rm = TRUE
+  )
+  
+  cv_results[[i]] <- data.frame(
+    Country = country_out,
+    RMSE = rmse,
+    MAE = mae,
+    Bias = bias,
+    Correlation = cor_val,
+    Coverage95 = coverage
+  )
+  
+  pred_df <- data.frame(
+    Country = country_out,
+    Observed = obs_prev,
+    Predicted = pred_mean,
+    Lower = pred_lower,
+    Upper = pred_upper
+  )
+  
+  all_predictions <- rbind(
+    all_predictions,
+    pred_df
+  )
+  
+  cat(
+    "Fold:", country_out,
+    " n_test =", nrow(test),
+    " predictions =", length(pred_mean),
+    "\n"
+  )
+}
+
+cv_summary <- do.call(
+  rbind,
+  cv_results
+)
+
+write.csv(
+  cv_summary,
+  "Outputs/africa_output/Spatial_CV_Summary_country.csv",
+  row.names = FALSE
+)
+
+write.csv(
+  all_predictions,
+  "Outputs/africa_output/Spatial_CV_Predictions_country.csv",
+  row.names = FALSE
+)
+
+
+################################################################################
+#          CREATE SPATIAL FOLDS WITHIN COUNTRIES                               #   
+################################################################################
+
+set.seed(123)
+
+sampled_data_join_sf1 <- sampled_data_join_sf %>%
+  group_by(country) %>%
+  group_modify(~{
+    
+    nloc <- nrow(.x)
+    
+    # Congo has only 3 locations
+    if(nloc <= 3){
+      
+      .x$spatial_fold <- 1
+      
+    } else {
+      
+      k <- ifelse(nloc >= 18, 4, 3)
+      
+      km <- kmeans(
+        as.matrix(
+          cbind(.x$lon, .x$lat)
+        ),
+        centers = k,
+        nstart = 100
+      )
+      
+      .x$spatial_fold <- km$cluster
+    }
+    
+    .x
+    
+  }) %>%
+  ungroup()
+
+#=========================================================
+# CREATE FOLD IDENTIFIERS
+#=========================================================
+
+sampled_data_join_sf1$fold_id <- paste(
+  sampled_data_join_sf1$country,
+  sampled_data_join_sf1$spatial_fold,
+  sep = "_"
+)
+
+#=========================================================
+# EXCLUDE CONGO FOLDS FROM VALIDATION
+#=========================================================
+
+folds <- unique(
+  sampled_data_join_sf1$fold_id
+)
+
+#=========================================================
+# STORAGE OBJECTS
+#=========================================================
+
+all_predictions <- data.frame()
+
+cv_results <- list()
+
+#=========================================================
+# SPATIAL BLOCK CROSS VALIDATION
+#=========================================================
+
+for(i in seq_along(folds)){
+  
+  fold_out <- folds[i]
+  
+  cat(
+    "\n=====================================\n"
+  )
+  
+  cat(
+    "LEAVING OUT:",
+    fold_out,
+    "\n"
+  )
+  
+  cat(
+    "=====================================\n"
+  )
+  
+  #-------------------------------------------------------
+  # SPLIT DATA
+  #-------------------------------------------------------
+  
+  train <- sampled_data_join_sf1 %>%
+    filter(fold_id != fold_out)
+  
+  test <- sampled_data_join_sf1 %>%
+    filter(fold_id == fold_out)
+  
+  train <- st_drop_geometry(train)
+  test <- st_drop_geometry(test)
+  
+  #-------------------------------------------------------
+  # PROJECTOR MATRICES
+  #-------------------------------------------------------
+  
+  A_train <- inla.spde.make.A(
+    mesh = mesh,
+    loc = as.matrix(
+      train[,c("lon","lat")]
+    )
+  )
+  
+  A_test <- inla.spde.make.A(
+    mesh = mesh,
+    loc = as.matrix(
+      test[,c("lon","lat")]
+    )
+  )
+  
+  #-------------------------------------------------------
+  # STACK ESTIMATION
+  #-------------------------------------------------------
+  
+  stack.est <- inla.stack(
+    
+    data = list(
+      y = train$Number_of_infected_tot_pm,
+      Ntrials = train$Number_of_participant_tot
+    ),
+    
+    A = list(
+      A_train,
+      1
+    ),
+    
+    effects = list(
+      
+      spatial = s.index,
+      
+      data.frame(
+        intercept            = 1,
+        annual_rainfall_2021 = train$annual_rainfall_2021,
+        vegetation_index     = train$vegetation_index,
+        dist_to_water        = train$dist_to_water,
+        lc_water             = train$lc_water,
+        lc_trees             = train$lc_trees,
+        lc_built             = train$lc_built,
+        lc_cropland          = train$lc_cropland,
+        lc_wetland           = train$lc_wetland
+      )
+    ),
+    
+    tag = "est"
+  )
+  
+  #-------------------------------------------------------
+  # STACK PREDICTION
+  #-------------------------------------------------------
+  
+  stack.pred <- inla.stack(
+    
+    data = list(
+      y = NA,
+      Ntrials = test$Number_of_participant_tot
+    ),
+    
+    A = list(
+      A_test,
+      1
+    ),
+    
+    effects = list(
+      
+      spatial = s.index,
+      
+      data.frame(
+        intercept            = 1,
+        annual_rainfall_2021 = test$annual_rainfall_2021,
+        vegetation_index     = test$vegetation_index,
+        dist_to_water        = test$dist_to_water,
+        lc_water             = test$lc_water,
+        lc_trees             = test$lc_trees,
+        lc_built             = test$lc_built,
+        lc_cropland          = test$lc_cropland,
+        lc_wetland           = test$lc_wetland
+      )
+    ),
+    
+    tag = "pred"
+  )
+  
+  stk <- inla.stack(
+    stack.est,
+    stack.pred
+  )
+  
+  #-------------------------------------------------------
+  # MODEL
+  #-------------------------------------------------------
+  
+  formula <-
+    y ~ -1 +
+    intercept +
+    annual_rainfall_2021 +
+    vegetation_index +
+    dist_to_water +
+    lc_water +
+    lc_trees +
+    lc_built +
+    lc_cropland +
+    lc_wetland +
+    f(
+      spatial,
+      model = spde
+    )
+  
+  fit <- inla(
+    
+    formula,
+    
+    family = "betabinomial",
+    
+    data = inla.stack.data(stk),
+    
+    Ntrials =
+      inla.stack.data(stk)$Ntrials,
+    
+    control.predictor = list(
+      A = inla.stack.A(stk),
+      compute = TRUE
+    ),
+    
+    control.fixed = list(
+      mean.intercept = -3,
+      prec.intercept = 0.8,
+      mean = 0,
+      prec = 0.2
+    ),
+    
+    control.compute = list(
+      dic = TRUE,
+      waic = TRUE,
+      cpo = TRUE,
+      config = TRUE
+    )
+  )
+  
+  #=========================================================
+  # POSTERIOR SAMPLES
+  #=========================================================
+  
+  samples <- inla.posterior.sample(
+    n = 200,
+    result = fit
+  )
+  
+  #=========================================================
+  # PREDICTIONS
+  #=========================================================
+  
+  idx.pred <- inla.stack.index(stk,"pred")$data
+  
+  
+  eta_mat <- inla.posterior.sample.eval(
+    function() APredictor[idx.pred],
+    inla.posterior.sample(200, fit)
+  )
+  
+  prob_mat <- plogis(eta_mat)
+  
+  pred_mean    <- rowMeans(prob_mat)
+  pred_sd      <- apply(prob_mat, 1, sd)
+  pred_lower   <- apply(prob_mat, 1, quantile, 0.025)
+  pred_upper   <- apply(prob_mat, 1, quantile, 0.975)
+  pred_median  <- apply(prob_mat, 1, median)
+  obs_prev <- test$PR_Pm_tot
+  
+  #-------------------------------------------------------
+  # METRICS
+  #-------------------------------------------------------
+  
+  rmse <- sqrt(
+    mean(
+      (obs_prev - pred_mean)^2,
+      na.rm = TRUE
+    )
+  )
+  
+  mae <- mean(
+    abs(obs_prev - pred_mean),
+    na.rm = TRUE
+  )
+  
+  cor_val <- cor(
+    obs_prev,
+    pred_mean,
+    use = "complete.obs"
+  )
+  
+  coverage <- mean(
+    obs_prev >= pred_lower &
+      obs_prev <= pred_upper,
+    na.rm = TRUE
+  )
+  
+  cv_results[[i]] <- data.frame(
+    Fold = fold_out,
+    RMSE = rmse,
+    MAE = mae,
+    Correlation = cor_val,
+    Coverage95 = coverage
+  )
+  
+  pred_df <- data.frame(
+    Fold = fold_out,
+    Country = test$country,
+    Observed = obs_prev,
+    Predicted = pred_mean,
+    Lower95 = pred_lower,
+    Upper95 = pred_upper
+  )
+  
+  all_predictions <- rbind(
+    all_predictions,
+    pred_df
+  )
+  
+}
+
+#=========================================================
+# RESULTS
+#=========================================================
+
+cv_summary <- do.call(
+  rbind,
+  cv_results
+)
+
+print(cv_summary)
+
+#=========================================================
+# OVERALL PERFORMANCE
+#=========================================================
+
+overall_results <- data.frame(
+  Mean_RMSE =
+    mean(cv_summary$RMSE, na.rm = TRUE),
+  
+  Mean_MAE =
+    mean(cv_summary$MAE, na.rm = TRUE),
+  
+  Mean_Correlation = mean(cv_summary$Correlation, na.rm = TRUE),  
+  Mean_Coverage95 = mean(cv_summary$Coverage95, na.rm = TRUE))
+
+print(overall_results)
+
+#=========================================================
+# CHECK PREDICTIONS
+#=========================================================
+
+cat("\n")
+cat("Total predictions:", nrow(all_predictions), "\n")
+cat("\n")
+
+print(
+  table(all_predictions$Country)
+)
+
+#=========================================================
+# OBSERVED VS PREDICTED
+#=========================================================
+
+ggplot(
+  all_predictions, aes(x = Observed, y = Predicted, colour = Country)) +
+  geom_point(size = 3) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    linetype = "dashed") +
+  theme_bw() +
+  labs(
+    title = "Within-country spatial cross-validation",
+    x = "Observed prevalence",
+    y = "Predicted prevalence")
+
+#=========================================================
+# SAVE RESULTS
+#=========================================================
+
+write.csv(
+  cv_summary,
+  "Outputs/africa_output/Spatial_CV_Summary_within_country.csv",
+  row.names = FALSE
+)
+
+write.csv(
+  all_predictions,
+  "Outputs/africa_output/Spatial_CV_Predictions_within_country.csv",
+  row.names = FALSE
+)

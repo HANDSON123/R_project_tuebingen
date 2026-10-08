@@ -1684,6 +1684,9 @@ plot(df_resid$observed, df_resid$fitted,
        xlab = "Observed prevalence",
        ylab = "Fitted prevalence")
   abline(0, 1, col = "red")
+  
+res_vegetation$summary.fixed
+
 ```
 
 
@@ -2019,6 +2022,144 @@ grid_sf_africa1$PR_all_age_L <- mapply(
   age_min_out  = rep(0, n),
   age_max_out  = rep(99, n),
   parameters   = "Pf_Smith2007")
+
+
+grid_sf_africa_mask_unstable1 <- grid_sf_africa1 |>
+  mutate(
+    pred_mean    = ifelse(limit == 0, NA, pred_mean),
+    pred_sd      = ifelse(limit == 0, NA, pred_sd),
+    pred_q05     = ifelse(limit == 0, NA, pred_q05),
+    pred_q95     = ifelse(limit == 0, NA, pred_q95),
+    PR_all_age   = ifelse(limit == 0, NA, PR_all_age),
+    PR_all_age_L = ifelse(limit == 0, NA, PR_all_age_L),
+    PR_all_age_U = ifelse(limit == 0, NA, PR_all_age_U))
+
+grid_sf_africa_mask_stable1 <- grid_sf_africa1 |>
+  mutate(
+    pred_mean    = ifelse(limit %in% c(0,1), NA, pred_mean),
+    pred_sd      = ifelse(limit %in% c(0,1), NA, pred_sd),
+    pred_q05     = ifelse(limit %in% c(0,1), NA, pred_q05),
+    pred_q95     = ifelse(limit %in% c(0,1), NA, pred_q95),
+    PR_all_age   = ifelse(limit %in% c(0,1), NA, PR_all_age),
+    PR_all_age_L = ifelse(limit %in% c(0,1), NA, PR_all_age_L),
+    PR_all_age_U = ifelse(limit %in% c(0,1), NA, PR_all_age_U))
+
+
+v1 <- vect(grid_sf_africa_mask_unstable1)
+
+template <- rast(
+  ext = ext(v1),
+  resolution = 5000,
+  crs = crs(v1)
+)
+
+
+grid_sf_africa_mask_unstable_raster1 <- rasterize(
+  v1,
+  template,
+  field = c("pred_mean", "pred_q05", "pred_q95", "PR_all_age", "PR_all_age_L", "PR_all_age_U")
+)
+
+v1 <- vect(grid_sf_africa_mask_stable1)
+
+template <- rast(
+  ext = ext(v1),
+  resolution = 5000,
+  crs = crs(v1)
+)
+
+grid_sf_africa_mask_stable_raster1 <- rasterize(
+  v1,
+  template,
+ field = c("pred_mean", "pred_q05", "pred_q95", "PR_all_age", "PR_all_age_L", "PR_all_age_U")
+)
+
   
+```
+
+
+```{r}
+Africa_prev_1 <- ggplot(shp_africa) +
+  geom_spatraster(data = grid_sf_africa_mask_unstable_raster1,
+                  mapping = aes(fill = PR_all_age))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "annual prevalence of P. f")+
+  theme_void()+
+  labs(title = "annual prevalence of P. f in 2021 (MAP)")
+  
+
+ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_admin2_level_unstable_MAP.png",
+       plot = Africa_prev_1, width = 6, height = 4, dpi = 300)
+
+Africa_prev_country_1 <- ggplot(shp_africa_country) +
+  geom_spatraster(data = grid_sf_africa_mask_unstable_raster1,
+                  mapping = aes(fill = PR_all_age))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "annual prevalence of P. f")+
+  theme_void()+
+  labs(title = "annual prevalence of P. f in 2021 (MAP)")
+
+ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_country_level_unstable_MAP.png",
+       plot = Africa_prev_country_1, width = 6, height = 4, dpi = 300)
+
+
+# setting unstable areas to 0
+
+Africa_prev_2 <- ggplot(shp_africa) +
+  geom_spatraster(data = grid_sf_africa_mask_stable_raster1,
+                  mapping = aes(fill = PR_all_age))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "annual prevalence of P. f")+
+  theme_void()+
+  labs(title = "annual prevalence of P. f in 2021 (MAP)")
+
+ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_admin2_level_MAP.png",
+       plot = Africa_prev_2, width = 6, height = 4, dpi = 300)
+
+Africa_prev_country_2 <- ggplot(shp_africa_country) +
+  geom_spatraster(data = grid_sf_africa_mask_stable_raster1,
+                  mapping = aes(fill = PR_all_age))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "annual prevalence of P. f")+
+  theme_void()+
+  labs(title = "annual prevalence of P. f in 2021 (MAP)")
+
+ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_country_level_MAP.png",
+       plot = Africa_prev_country_2, width = 6, height = 4, dpi = 300)
+
+
+grid_sf_africa_mask_stable_raster1$diff_PR <- grid_sf_africa_mask_stable_raster1$pred_mean - grid_sf_africa_mask_stable_raster1$PR_all_age
+
+Africa_prev_country_3 <- ggplot(shp_africa_country) +
+  geom_spatraster(data = grid_sf_africa_mask_stable_raster1,
+                  mapping = aes(fill = diff_PR))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(-0.7, 0, 0.05, 0.1, 0.2, 0.56),
+    na.value = "transparent",
+    name = "Difference in prevalence of P. f")+
+  theme_void()+
+  labs(title = "Difference in prevalence of P. f in 2021 \n using MAP modeled prevalence vs estimated\n prevalence using our model")
+
+ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_country_level_diff_MAP.png",
+       plot = Africa_prev_country_3, width = 6, height = 4, dpi = 300)
+
 ```
 

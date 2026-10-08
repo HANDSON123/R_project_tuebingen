@@ -6,7 +6,7 @@
 library(tidyverse)
 library(sf)
 library(terra)
-
+library(lwgeom)
 ################################################################################
 #                              Useful functions                                #
 ################################################################################
@@ -1275,52 +1275,93 @@ shp_africa_summarise <- shp_africa %>%
 
 # distance to water
 
-# bbox <- st_bbox(grid_sf_africa)
+# ------------------------------------------------------------------
+# Idea: densify rivers and lake shorelines into points every
+# `spacing_m` meters, then do a nearest-neighbour search with a KD-tree.
+# Error <= spacing_m / 2 (250 m for 500 m spacing), memory is small.
+# Points are converted to 3D coordinates on the globe, so distances
+# are valid everywhere in Africa (no projection distortion).
+# ------------------------------------------------------------------
 
-rivers <- vect("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp")
-lakes <- vect("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp")
+spacing_m <- 500
+min_order <- 1      # Strahler filter. 1 = all rivers (modeling choice!)
+R <- 6371008.8      # mean Earth radius (m)
 
+# put every location in a coordinate system where plain straight-line distance is correct everywhere
+to_xyz <- function(lonlat) {
+  lon <- lonlat[, 1] * pi / 180
+  lat <- lonlat[, 2] * pi / 180
+  cbind(R * cos(lat) * cos(lon), R * cos(lat) * sin(lon), R * sin(lat))
+}
 
-africa4326 <- st_transform(shp_africa, 4326)
-africa4326 <- vect(africa4326)
+# correct for the fact that the KD-tree measures a straight 
+# line through the Earth, not the path along its surface
 
-lakes_africa <- crop(lakes, africa4326)
+chord_to_arc <- function(d) 2 * R * asin(pmin(d / (2 * R), 1))
 
-r_template <- rast(
-  ext(vect(st_as_sf(shp_africa))),
-  resolution = 5000,
-  crs = "EPSG:3857")
+# Densify geometries in chunks and return xyz points
+# turn rivers and shorelines into many closely spaced 3D points, so that 
+# "distance to a line" becomes "distance to the nearest point"
 
-rivers <- project(rivers, "EPSG:3857")
-lakes_africa <- project(lakes_africa, "EPSG:3857")
+densify_xyz <- function(geom, spacing_m, chunk = 50000) {
+  idx <- split(seq_along(geom), ceiling(seq_along(geom) / chunk))
+  out <- lapply(idx, function(i) {
+    g <- st_segmentize(geom[i], units::set_units(spacing_m, "m"))  # adds vertices so that no two are more than 500 m apart
+    to_xyz(st_coordinates(g)[, 1:2, drop = FALSE])                 # extracts vertices
+  })
+  do.call(rbind, out)
+}
 
-rivers2 <- rivers[rivers$ORD_STRA >= 3, ]
+# Nearest distance (m, great-circle) from query points to a point cloud
+# for every query point (a centroid), find the distance to the closest point of the water cloud
 
-riv_r <- rasterize(
-  rivers2,
-  r_template,
-  field = 1,
-  background = NA)
+nn_dist <- function(xyz_water, xyz_query, chunk = 100000) {
+  idx <- split(seq_len(nrow(xyz_query)), ceiling(seq_len(nrow(xyz_query)) / chunk))
+  d <- unlist(lapply(idx, function(i)
+    nabor::knn(data = xyz_water,
+               query = xyz_query[i, , drop = FALSE],
+               k = 1)$nn.dists[, 1]))
+  chord_to_arc(d)
+}
 
+# ------------------------------------------------------------------
+# Data (all in EPSG:4326)
+# ------------------------------------------------------------------
+africa <- st_transform(shp_africa, 4326)
+wkt <- st_as_text(st_as_sfc(st_bbox(africa)))
 
-lake_r <- rasterize(
-  lakes_africa,
-  r_template,
-  field = 1,
-  background = NA)
+rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
+                  wkt_filter = wkt)
+rivers <- rivers[rivers$ORD_STRA >= min_order, ] |> st_geometry()
 
-water <- cover(riv_r, lake_r)
+lakes <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+                 wkt_filter = wkt)
+lakes_geom <- st_make_valid(st_geometry(lakes))
+shores <- st_boundary(lakes_geom)             # turns each polygon into its outline (a line)
+shores <- shores[!st_is_empty(shores)]
+shores <- st_cast(shores, "MULTILINESTRING")  # makes all the outlines one geometry type
+# Grid centroids in lon/lat
+cent <- grid_sf_africa |> st_centroid() |> st_transform(4326)
+xyz_cent <- to_xyz(st_coordinates(cent)[, 1:2])
 
-dist_water <- distance(
-  water,
-  filename = "data/dist_to_water_5km.tif",
-  overwrite = TRUE)
+# ------------------------------------------------------------------
+# Distances
+# ------------------------------------------------------------------
+xyz_riv  <- densify_xyz(rivers, spacing_m)
+d_river  <- nn_dist(xyz_riv, xyz_cent)
+rm(xyz_riv)
 
-dist_water <- rast("data/dist_to_water_5km.tif")
+xyz_lake <- densify_xyz(shores, spacing_m)
+d_lake   <- nn_dist(xyz_lake, xyz_cent)
+rm(xyz_lake)
 
-grid_sf_africa$dist_to_water <- terra::extract(
-  dist_water,
-  vect(grid_sf_africa))[,2]
+# Centroids inside a lake: distance is 0 (the shoreline would give > 0)
+in_lake <- lengths(st_intersects(cent, lakes_geom)) > 0
+d_lake[in_lake] <- 0
+
+# grid_sf_africa$dist_river_m <- d_river
+# grid_sf_africa$dist_lake_m  <- d_lake
+grid_sf_africa$dist_to_water <- pmin(d_river, d_lake)
 
 
 grid_sf_africa <- grid_sf_africa %>% 
@@ -1343,6 +1384,7 @@ for (col in numeric_cols) {
   grid_sf_africa <- fill_by_nearest(grid_sf_africa, col)
 }
 
-
-
 st_write(grid_sf_africa, "data/Africa_data/grid_data_for_prediction_sf.gpkg", append = FALSE)
+
+
+
