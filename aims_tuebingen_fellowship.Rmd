@@ -308,8 +308,8 @@ coords_Africa <- coordinates(sampled_data_join_sf_sp)
 mesh_Africa <- inla.mesh.2d(
   loc      = coords_Africa,
   boundary = inla.sp2segment(Africa_union_sp),
-  max.edge = c(25e3, 2000e3),   
-  cutoff   = 20e3,
+  max.edge = c(1000e3, 2000e3),   
+  cutoff   = 250e3,
   offset   = c(100e3, 2000e3))
 
 # Extract triangle vertex indices
@@ -343,7 +343,7 @@ ggplot() +
 ```{r}
 spde_Africa <- inla.spde2.pcmatern(
   mesh = mesh_Africa,
-  prior.range = c(40000, 0.5),
+  prior.range = c(100000, 0.5),
   prior.sigma = c(0.2, 0.5))
 
 A_est <- inla.spde.make.A(mesh_Africa, loc = coords_Africa)
@@ -444,7 +444,7 @@ effects_fixed_baseline <- data.frame(
 
 stk_est_rainfall <- inla.stack(
   data = list(
-    y       = sampled_data_join_sf$Number_of_infected_tot_pf,
+    y       = sampled_data_join_sf$Number_of_infected_tot_pm,
     Ntrials = sampled_data_join_sf$Number_of_participant_tot
   ),
   A = list(A_est, 1),
@@ -458,7 +458,7 @@ stk_est_rainfall <- inla.stack(
 
 stk_est_rainfall1 <- inla.stack(
   data = list(
-    y       = sampled_data_join_sf$Number_of_infected_tot_pf,
+    y       = sampled_data_join_sf$Number_of_infected_tot_pm,
     Ntrials = sampled_data_join_sf$Number_of_participant_tot
   ),
   A = list(A_est, 1),
@@ -471,7 +471,7 @@ stk_est_rainfall1 <- inla.stack(
 
 stk_est_temperature <- inla.stack(
   data = list(
-    y       = sampled_data_join_sf$Number_of_infected_tot_pf,
+    y       = sampled_data_join_sf$Number_of_infected_tot_pm,
     Ntrials = sampled_data_join_sf$Number_of_participant_tot
   ),
   A = list(A_est, 1),
@@ -485,7 +485,7 @@ stk_est_temperature <- inla.stack(
 
 stk_est_elevation <- inla.stack(
   data = list(
-    y       = sampled_data_join_sf$Number_of_infected_tot_pf,
+    y       = sampled_data_join_sf$Number_of_infected_tot_pm,
     Ntrials = sampled_data_join_sf$Number_of_participant_tot
   ),
   A = list(A_est, 1),
@@ -499,7 +499,7 @@ stk_est_elevation <- inla.stack(
 
 stk_est_baseline <- inla.stack(
   data = list(
-    y       = sampled_data_join_sf$Number_of_infected_tot_pf,
+    y       = sampled_data_join_sf$Number_of_infected_tot_pm,
     Ntrials = sampled_data_join_sf$Number_of_participant_tot
   ),
   A = list(A_est, 1),
@@ -691,27 +691,6 @@ for (var in vars_to_scale) {
 }
 
 
-covs <- c("annual_rainfall_2021", "pop_density_2020", "dist_to_water",
-          "lc_water", "lc_trees", "lc_cropland", "lc_built", "lc_wetland")
-# add "vegetation_index" here if it is in your final model
-
-x <- grid_sf_africa |>
-  sf::st_drop_geometry() |>
-  dplyr::select(dplyr::all_of(covs)) |>
-  as.matrix()
-
-x <- x[complete.cases(x), ]        # remove cells with missing covariates
-
-n_sim <- 1000
-b0 <- rnorm(n_sim, -3, 1.1)
-b  <- matrix(rnorm(n_sim * ncol(x), 0, 0.7), n_sim, ncol(x))   # ncol(x) = number of covariates
-
-cells <- sample(nrow(x), 500)
-p <- plogis(b0 + b %*% t(x[cells, ]))
-
-hist(p, breaks = 50)
-mean(p > 0.30)
-
 
 # ## Choose number of tiles
 # n_tiles  <- 100
@@ -837,8 +816,6 @@ res_elevation <- inla(
     compute = TRUE
   ),
   control.fixed = list(
-    mean.intercept = -3,
-    prec.intercept = 0.8,
     mean = 0,
     prec = 0.2
   ),
@@ -1116,14 +1093,6 @@ ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_country_level.pdf",
 
 ```
 
-
-```{r}
-
-```
-
-
-
-
 ```{r}
 sampled_data_join_sf <- st_read("data/Africa_data/sampled_data_join_sf.gpkg")
 shp_africa <- st_read("data/Africa_data/shp_africa/Africa_simplified.shp") %>% st_transform(3857)
@@ -1145,9 +1114,9 @@ sampled_data_join_sf$lat <- coords_Africa[,2]
 mesh <- inla.mesh.2d(
   loc      = coords_Africa,
   boundary = inla.sp2segment(Africa_union_sp),
-  max.edge = c(25e3, 2000e3),   
-  cutoff   = 20e3,
-  offset   = c(100e3, 2000e3))
+  max.edge = c(1000e3, 2000e3),   
+  cutoff   = 250e3,
+  offset   = c(1000e3, 2000e3))
 
 
 #-----------------------------------------------------------
@@ -1156,7 +1125,7 @@ mesh <- inla.mesh.2d(
 
 spde <- inla.spde2.pcmatern(
   mesh = mesh,
-  prior.range = c(40000, 0.5),
+  prior.range = c(100000, 0.5),
   prior.sigma = c(0.2, 0.5))
 
 s.index <- inla.spde.make.index(
@@ -1359,8 +1328,6 @@ run_random_cv <- function(data, covariates, mesh, spde, s.index){
         compute = TRUE),
 
       control.fixed = list(
-        mean.intercept = -3,
-        prec.intercept = 0.8,
         mean = 0,
         prec = 0.2),
 
@@ -1376,11 +1343,13 @@ run_random_cv <- function(data, covariates, mesh, spde, s.index){
 
     idx.pred <- inla.stack.index(stk, "pred")$data
 
+    samples <- inla.posterior.sample(200, fit)
+    
     eta_mat <- inla.posterior.sample.eval(
-
-      function() APredictor[idx.pred],
-
-      inla.posterior.sample(200, fit))
+    function(idx) APredictor[idx],
+    samples,
+    idx = idx.pred
+    )
 
     prob_mat <- plogis(eta_mat)
 
