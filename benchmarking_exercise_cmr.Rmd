@@ -232,6 +232,7 @@ plot(st_geometry(map_2011_cmr_sf), pch = 16, cex = 0.5, main = "2011 Survey Poin
 ```{r}
 cmr_pf_data_2011 <- st_read("data/cmr_data/benchmarking_spatial_data_cmr_sf.gpkg")
 grid <- st_read("data/cmr_data/cmr_map_grid.gpkg")
+shp_cmr <- read_sf("data/cmr_data/CMR_shape_file/cameroun_districts_2024.shp")
 ```
 
 
@@ -309,20 +310,39 @@ pts      <- st_transform(cmr_pf_data_2011, 3857)
 shp_cmr_m  <- st_transform(shp_cmr, 3857)
 
 
-mesh <- fmesher::fm_mesh_2d_inla(
+mesh_1 <- fmesher::fm_mesh_2d_inla(
   loc      = st_coordinates(pts),
   boundary = fm_as_segm(shp_cmr_m),
-  max.edge = c(50e3, 200e3),   # 50 km near data, 200 km outer
-  cutoff   = 15e3,             # min distance between points (15 km)
-  offset   = c(50e3, 150e3)    # extend mesh 50–150 km beyond country
+  max.edge = c(25e3, 100e3),                     # 50 km near data, 200 km outer
+  cutoff   = 10e3,                               # min distance between points (15 km)
+  offset   = c(50e3, 150e3)                      # extend mesh 50–150 km beyond country
 )
 
+mesh_2 <- fmesher::fm_mesh_2d_inla(
+  loc      = st_coordinates(pts),
+  boundary = fm_as_segm(shp_cmr_m),
+  max.edge = c(100e3, 250e3),                     # 100 km near data, 250 km outer
+  cutoff   = 50e3,                               # min distance between points (50 km)
+  offset   = c(50e3, 150e3)                      # extend mesh 50–150 km beyond country
+)
+
+
+mesh_3 <- fmesher::fm_mesh_2d_inla(
+  loc      = st_coordinates(pts),
+  boundary = fm_as_segm(shp_cmr_m),
+  max.edge = c(250e3, 500e3),                     # 250 km near data, 500 km outer
+  cutoff   = 200e3,                               # min distance between points (100 km)
+  offset   = c(50e3, 150e3)                      # extend mesh 50–150 km beyond country
+)
+
+
+
 # Extract mesh triangles
-mesh_tri <- mesh$graph$tv   # triangle vertices (indices)
+mesh_tri <- mesh_3$graph$tv   # triangle vertices (indices)
 
 # Convert each triangle to a polygon
 triangles <- lapply(1:nrow(mesh_tri), function(i) {
-  coords <- mesh$loc[mesh_tri[i, ], 1:2]
+  coords <- mesh_3$loc[mesh_tri[i, ], 1:2]
   coords <- rbind(coords, coords[1, ])  # close polygon
   st_polygon(list(coords))
 })
@@ -570,7 +590,441 @@ abline(0, 1, col = "red")
 
 The beta‑binomial SPDE model shows strong but short‑range spatial dependence (posterior range ~ 28 km, σ ~ 1.23). The PIT histogram indicates mild right‑skew, reflecting slight underestimation of very high observed prevalences, but overall calibration is acceptable. Residual Moran’s I is significantly negative (I ≈ –0.07, p ≈ 0.02), consistent with localized over‑ and under‑prediction patterns produced by the short spatial range. Compared to the binomial model, the beta‑binomial likelihood reduces residual spatial autocorrelation and improves PIT calibration. Overall, the model fits well, with only minor miscalibration in the upper tail.
 
+
+```{r}
+#=========================================================
+# 15-FOLD RANDOM CROSS-VALIDATION FOR MESH COMPARISON
+#=========================================================
+cmr_pf_data_2011 <- st_read("data/cmr_data/benchmarking_spatial_data_cmr_sf.gpkg")
+grid <- st_read("data/cmr_data/cmr_map_grid.gpkg")
+shp_cmr <- read_sf("data/cmr_data/CMR_shape_file/cameroun_districts_2024.shp")
+
+
+pts      <- st_transform(cmr_pf_data_2011, 3857)
+shp_cmr_m  <- st_transform(shp_cmr, 3857)
+
+
+mesh_1 <- fmesher::fm_mesh_2d_inla(
+  loc      = st_coordinates(pts),
+  boundary = fm_as_segm(shp_cmr_m),
+  max.edge = c(25e3, 100e3),                     # 50 km near data, 200 km outer
+  cutoff   = 10e3,                               # min distance between points (15 km)
+  offset   = c(50e3, 150e3)                      # extend mesh 50–150 km beyond country
+)
+
+mesh_2 <- fmesher::fm_mesh_2d_inla(
+  loc      = st_coordinates(pts),
+  boundary = fm_as_segm(shp_cmr_m),
+  max.edge = c(100e3, 250e3),                     # 100 km near data, 250 km outer
+  cutoff   = 50e3,                               # min distance between points (50 km)
+  offset   = c(50e3, 150e3)                      # extend mesh 50–150 km beyond country
+)
+
+
+mesh_3 <- fmesher::fm_mesh_2d_inla(
+  loc      = st_coordinates(pts),
+  boundary = fm_as_segm(shp_cmr_m),
+  max.edge = c(250e3, 500e3),                     # 250 km near data, 500 km outer
+  cutoff   = 200e3,                               # min distance between points (100 km)
+  offset   = c(50e3, 150e3)                      # extend mesh 50–150 km beyond country
+)
+
+#=========================================================
+# CREATE FIXED RANDOM FOLDS
+#=========================================================
+
+set.seed(123)
+
+pts$cv_fold <- sample(
+  rep(
+    1:15,
+    length.out = nrow(pts)
+  )
+)
+
+#=========================================================
+# STORE MESHES
+#=========================================================
+
+mesh_list <- list(
+
+  Fine = mesh_1,
+
+  Medium = mesh_2,
+
+  Coarse = mesh_3
+
+)
+
+#=========================================================
+# CV FUNCTION
+#=========================================================
+
+run_mesh_cv <- function(
+  data,
+  mesh,
+  nfolds = 15
+){
+
+  spde <- inla.spde2.pcmatern(
+    mesh = mesh,
+    alpha = 2,
+    prior.range = c(90e3, 0.5),
+    prior.sigma = c(0.22, 0.5)
+  )
+
+  s.index <- inla.spde.make.index(
+    "spatial",
+    spde$n.spde
+  )
+
+  fold_results <- list()
+
+  for(i in 1:nfolds){
+
+    cat("\n=====================================\n")
+
+    cat("LEAVING OUT FOLD:", i, "\n")
+
+    cat("\n=====================================\n")
+
+    train <- data %>%
+      filter(cv_fold != i)
+
+    test <- data %>%
+      filter(cv_fold == i)
+
+    #-----------------------------------------------------
+    # PROJECTOR MATRICES
+    #-----------------------------------------------------
+
+    A_train <- inla.spde.make.A(mesh = mesh, loc = st_coordinates(train))
+
+    A_test <- inla.spde.make.A(mesh = mesh, loc = st_coordinates(test))
+
+    #-----------------------------------------------------
+    # EFFECTS
+    #-----------------------------------------------------
+
+    train_effects <- data.frame(
+      intercept       = rep(1, nrow(train)),
+      rainfall        = train$rainfall,
+      temperature     = train$temperature,
+      pop_density     = train$pop_density,
+      dist_to_water   = train$dist_to_water,
+      lc_water        = train$landcover_water,
+      lc_trees        = train$landcover_trees,
+      lc_built        = train$landcover_builts,
+      lc_wetland      = train$landcover_wetland,
+      lc_cropland     = train$landcover_cropland,
+      ITN             = train$ITN_2011,
+      effective_treat = train$effective_treat
+    )
+
+    test_effects <- data.frame(
+      intercept       = rep(1, nrow(test)),
+      rainfall        = test$rainfall,
+      temperature     = test$temperature,
+      pop_density     = test$pop_density,
+      dist_to_water   = test$dist_to_water,
+      lc_water        = test$landcover_water,
+      lc_trees        = test$landcover_trees,
+      lc_built        = test$landcover_builts,
+      lc_wetland      = test$landcover_wetland,
+      lc_cropland     = test$landcover_cropland,
+      ITN             = test$ITN_2011,
+      effective_treat = test$effective_treat
+    )
+
+    #-----------------------------------------------------
+    # ESTIMATION STACK
+    #-----------------------------------------------------
+
+    stack.est <- inla.stack(
+
+      data = list(
+        y       = train$positive,
+        Ntrials = train$examined
+      ),
+
+      A = list(
+        A_train,
+        1
+      ),
+
+      effects = list(
+        spatial = s.index,
+        train_effects
+      ),
+
+      tag = "est"
+    )
+
+    #-----------------------------------------------------
+    # PREDICTION STACK
+    #-----------------------------------------------------
+
+    stack.pred <- inla.stack(
+
+      data = list(
+        y       = NA,
+        Ntrials = test$examined
+      ),
+
+      A = list(
+        A_test,
+        1
+      ),
+
+      effects = list(
+        spatial = s.index,
+        test_effects
+      ),
+
+      tag = "pred"
+    )
+
+    #-----------------------------------------------------
+    # COMBINE STACKS
+    #-----------------------------------------------------
+
+    stk <- inla.stack(
+      stack.est,
+      stack.pred
+    )
+
+    #-----------------------------------------------------
+    # FORMULA
+    #-----------------------------------------------------
+
+    formula_intervention <-
+      y ~ -1 +
+      intercept +
+      rainfall +
+      temperature +
+      pop_density +
+      dist_to_water +
+      lc_water +
+      lc_cropland +
+      lc_wetland +
+      lc_built +
+      lc_trees +
+      ITN +
+      effective_treat +
+      f(
+        spatial,
+        model = spde
+      )
+
+    #-----------------------------------------------------
+    # FIT MODEL
+    #-----------------------------------------------------
+
+    fit <- inla(
+
+      formula_intervention,
+
+      family = "binomial",
+
+      Ntrials =
+        inla.stack.data(stk)$Ntrials,
+
+      data =
+        inla.stack.data(stk),
+
+      control.predictor = list(
+        A = inla.stack.A(stk),
+        compute = TRUE
+      ),
+
+      control.fixed = list(
+        mean = 0,
+        prec = 1
+      ),
+
+      control.compute = list(
+        dic = TRUE,
+        waic = TRUE,
+        cpo = TRUE,
+        config = TRUE
+      )
+    )
+
+    #-----------------------------------------------------
+    # POSTERIOR SAMPLING
+    #-----------------------------------------------------
+
+    idx.pred <- inla.stack.index(
+      stk,
+      "pred"
+    )$data
+
+    samples <- inla.posterior.sample(50, fit)
+    
+    eta_mat <- inla.posterior.sample.eval(
+    function(idx) APredictor[idx],
+    samples,
+    idx = idx.pred
+    )
+
+    prob_mat <- plogis(
+      eta_mat
+    )
+
+    pred_mean <- rowMeans(
+      prob_mat
+    )
+
+    pred_lower <- apply(
+      prob_mat,
+      1,
+      quantile,
+      probs = 0.025
+    )
+
+    pred_upper <- apply(
+      prob_mat,
+      1,
+      quantile,
+      probs = 0.975
+    )
+
+    #-----------------------------------------------------
+    # OBSERVED PREVALENCE
+    #-----------------------------------------------------
+
+    obs_prev <-
+      test$positive /
+      test$examined
+
+    #-----------------------------------------------------
+    # METRICS
+    #-----------------------------------------------------
+
+    rmse <- sqrt(
+      mean(
+        (obs_prev - pred_mean)^2,
+        na.rm = TRUE
+      )
+    )
+
+    mae <- mean(
+      abs(
+        obs_prev - pred_mean
+      ),
+      na.rm = TRUE
+    )
+
+    cor_val <- cor(
+      obs_prev,
+      pred_mean,
+      use = "complete.obs"
+    )
+
+    coverage <- mean(
+      obs_prev >= pred_lower &
+      obs_prev <= pred_upper,
+      na.rm = TRUE
+    )
+
+    log_cpo <- mean(
+      log(fit$cpo$cpo),
+      na.rm = TRUE
+    )
+
+    fold_results[[i]] <- data.frame(
+      DIC         = fit$dic$dic,
+      WAIC        = fit$waic$waic,
+      LogCPO      = log_cpo,
+      RMSE        = rmse,
+      MAE         = mae,
+      Correlation = cor_val,
+      Coverage95  = coverage
+    )
+
+  }
+
+  fold_results <- do.call(
+    rbind,
+    fold_results
+  )
+
+  return(
+    as.data.frame(
+      t(
+        colMeans(
+          fold_results,
+          na.rm = TRUE
+        )
+      )
+    )
+  )
+}
+
+#=========================================================
+# RUN ON ALL MESHES
+#=========================================================
+
+mesh_comparison <- lapply(
+
+  names(mesh_list),
+
+  function(m){
+
+    cat(
+      "\n\n========================================\n"
+    )
+
+    cat(
+      "RUNNING",
+      m,
+      "MESH\n"
+    )
+
+    cat(
+      "========================================\n"
+    )
+
+    res <- run_mesh_cv(
+      data = pts,
+      mesh = mesh_list[[m]],
+      nfolds = 15
+    )
+
+    data.frame(
+      Mesh = m,
+      res
+    )
+  }
+
+)
+
+#=========================================================
+# FINAL TABLE
+#=========================================================
+
+mesh_comparison <- do.call(
+  rbind,
+  mesh_comparison
+)
+
+print(mesh_comparison)
+
+write.csv(
+  mesh_comparison,
+  "Mesh_Comparison_15FoldCV.csv",
+  row.names = FALSE
+)
+
+mesh_comparison
+
+```
+
+The 15-fold random cross-validation demonstrated a strong influence of mesh resolution on model performance. The fine mesh consistently outperformed the medium and coarse meshes, yielding the lowest DIC (1893.85), WAIC (1915.88), RMSE (0.177), and MAE (0.139), together with the highest correlation between observed and predicted prevalence (r = 0.60). Model performance deteriorated progressively as the mesh became coarser, indicating a loss of spatial detail in the representation of the latent spatial field. In particular, the coverage of the 95% credible intervals declined markedly from 48.2% for the fine mesh to 15.3% for the coarse mesh, suggesting poorer uncertainty quantification under coarser spatial discretisations. Although the medium mesh produced a slightly higher mean log-CPO, the overall balance of fit, predictive accuracy, and uncertainty calibration strongly favored the fine mesh. Consequently, the fine mesh was selected for subsequent analyses and spatial prediction.
+
+
 # Build grid for prediction and the prediction model
+
 
 ```{r}
 # Build the A‑matrix for prediction locations

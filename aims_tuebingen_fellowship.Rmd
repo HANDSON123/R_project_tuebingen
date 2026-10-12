@@ -308,9 +308,9 @@ coords_Africa <- coordinates(sampled_data_join_sf_sp)
 mesh_Africa <- inla.mesh.2d(
   loc      = coords_Africa,
   boundary = inla.sp2segment(Africa_union_sp),
-  max.edge = c(1000e3, 2000e3),   
+  max.edge = c(50e3, 2000e3),   
   cutoff   = 250e3,
-  offset   = c(100e3, 2000e3))
+  offset   = c(1000e3, 2000e3))
 
 # Extract triangle vertex indices
 tri <- mesh_Africa$graph$tv
@@ -343,7 +343,7 @@ ggplot() +
 ```{r}
 spde_Africa <- inla.spde2.pcmatern(
   mesh = mesh_Africa,
-  prior.range = c(100000, 0.5),
+  prior.range = c(50000, 0.5),
   prior.sigma = c(0.2, 0.5))
 
 A_est <- inla.spde.make.A(mesh_Africa, loc = coords_Africa)
@@ -485,7 +485,7 @@ stk_est_temperature <- inla.stack(
 
 stk_est_elevation <- inla.stack(
   data = list(
-    y       = sampled_data_join_sf$Number_of_infected_tot_pm,
+    y       = sampled_data_join_sf$Number_of_infected_tot_pf,
     Ntrials = sampled_data_join_sf$Number_of_participant_tot
   ),
   A = list(A_est, 1),
@@ -691,121 +691,6 @@ for (var in vars_to_scale) {
 }
 
 
-
-# ## Choose number of tiles
-# n_tiles  <- 100
-# tile_id  <- cut(seq_len(nrow(grid_sf_africa)), breaks = n_tiles, labels = FALSE)
-# n_samp   <- 200  # posterior samples per tile
-# 
-# # Storage
-# pred_mean_full <- numeric(nrow(grid_sf_africa))
-# pred_sd_full   <- numeric(nrow(grid_sf_africa))
-# pred_q05_full  <- numeric(nrow(grid_sf_africa))
-# pred_q95_full  <- numeric(nrow(grid_sf_africa))
-# 
-# for (tile in seq_len(n_tiles)) {
-#   cat("Tile", tile, "of", n_tiles, "\n")
-#   
-#   # 1) Subset grid
-#   grid_tile <- grid_sf_africa[tile_id == tile, ]
-#   
-#   # 2) A-matrix for this tile
-#   A_pred_tile <- inla.spde.make.A(
-#     mesh = mesh_Africa,
-#     loc  = st_coordinates(grid_tile)
-#   )
-#   
-#   # 3) Fixed effects for this tile
-#   effects_pred_tile <- data.frame(
-#     intercept               = 1,
-#     elevation               = grid_tile$elevation,
-#     vegetation_index        = grid_tile$vegetation_index,
-#     pop_density_2020        = grid_tile$pop_density_2020,
-#     dist_to_water           = grid_tile$dist_to_water,
-#     lc_cropland             = grid_tile$lc_cropland,
-#     lc_water                = grid_tile$lc_water,
-#     lc_wetland              = grid_tile$lc_wetland,
-#     lc_built                = grid_tile$lc_built,
-#     lc_trees                = grid_tile$lc_trees
-#   )
-#   
-#   # 4) Prediction stack for this tile
-#   stk_pred_tile <- inla.stack(
-#     data    = list(y = NA, Ntrials = NA),
-#     A       = list(A_pred_tile, 1),
-#     effects = list(
-#       spatial = 1:spde_Africa$n.spde,
-#       effects_pred_tile
-#     ),
-#     tag = "pred"
-#   )
-#   
-#   # 5) Full stack for this tile
-#   stk_full_tile <- inla.stack(stk_est_elevation, stk_pred_tile)
-#   
-#   # 6) Fit INLA with config = TRUE for posterior sampling
-#   res_pred_tile <- inla(
-#     formula_elevation,
-#     family = "betabinomial",
-#     data   = inla.stack.data(stk_full_tile),
-#     Ntrials = inla.stack.data(stk_full_tile)$Ntrials,
-#     control.predictor = list(
-#       A       = inla.stack.A(stk_full_tile),
-#       compute = TRUE,
-#       link    = 1
-#     ),
-#     control.fixed = list(mean = 0, prec = 0.2),
-#     control.compute = list(config = TRUE)
-#   )
-#   
-#   # 7) Posterior samples for this tile
-#   samples_tile <- inla.posterior.sample(n_samp, res_pred_tile)
-#   
-#   # 8) Identify latent indices (once per tile)
-#   latent_names <- rownames(samples_tile[[1]]$latent)
-#   
-#   fixed_base_names   <- rownames(res_pred_tile$summary.fixed)
-#   fixed_latent_names <- paste0(fixed_base_names, ":1")
-#   fixed_idx          <- match(fixed_latent_names, latent_names)
-#   
-#   spatial_idx <- grep("^spatial:", latent_names)
-#   
-#   # 9) Build linear predictor samples for this tile
-#   n_grid_tile <- nrow(grid_tile)
-#   X_pred_tile <- as.matrix(effects_pred_tile)
-#   eta_mat_tile <- matrix(NA_real_, nrow = n_grid_tile, ncol = n_samp)
-#   
-#   for (s in seq_len(n_samp)) {
-#     latent_s   <- samples_tile[[s]]$latent
-#     beta_s     <- latent_s[fixed_idx]
-#     spatial_s  <- latent_s[spatial_idx]
-#     
-#     eta_fixed_s   <- as.vector(X_pred_tile %*% beta_s)
-#     eta_spatial_s <- as.vector(A_pred_tile %*% spatial_s)
-#     
-#     eta_mat_tile[, s] <- eta_fixed_s + eta_spatial_s
-#   }
-#   
-#   # 10) Transform to probabilities and summarize
-#   prob_mat_tile <- 1 / (1 + exp(-eta_mat_tile))
-#   
-#   pred_mean_tile <- rowMeans(prob_mat_tile)
-#   pred_sd_tile   <- apply(prob_mat_tile, 1, sd)
-#   pred_q05_tile  <- apply(prob_mat_tile, 1, quantile, 0.05)
-#   pred_q95_tile  <- apply(prob_mat_tile, 1, quantile, 0.95)
-#   
-#   # 11) Store back into full vectors
-#   idx <- (tile_id == tile)
-#   pred_mean_full[idx] <- pred_mean_tile
-#   pred_sd_full[idx]   <- pred_sd_tile
-#   pred_q05_full[idx]  <- pred_q05_tile
-#   pred_q95_full[idx]  <- pred_q95_tile
-# }
-
-################################################################################
-#               Another way of fitting the model                               #
-################################################################################
-
 res_elevation <- inla(
   formula_elevation,
   family = "betabinomial",
@@ -909,10 +794,6 @@ grid_sf_africa$pred_mean <- pred_mean
 grid_sf_africa$pred_sd   <- pred_sd
 grid_sf_africa$pred_q05  <- pred_q05
 grid_sf_africa$pred_q95  <- pred_q95
-################################################################################
-#                       End                                                    #
-################################################################################
-
 ```
 
 ```{r}
@@ -1019,7 +900,7 @@ Africa_prev_1 <- ggplot(shp_africa) +
   labs(title = "annual prevalence of P. f in 2021 using COMAL data")
   
 
-ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_admin2_level_unstable.png",
+ggsave("Outputs/africa_output/Pf folder/2021_africa_pr_falciparum_map_admin2_level_unstable.pdf",
        plot = Africa_prev_1, width = 6, height = 4, dpi = 300)
 
 Africa_prev_country_1 <- ggplot(shp_africa_country) +
@@ -1034,7 +915,7 @@ Africa_prev_country_1 <- ggplot(shp_africa_country) +
   theme_void()+
   labs(title = "annual prevalence of P. f in 2021 using COMAL data")
 
-ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_country_level_unstable.pdf",
+ggsave("Outputs/africa_output/Pf folder/2021_africa_pr_falciparum_map_country_level_unstable.pdf",
        plot = Africa_prev_country_1, width = 6, height = 4, dpi = 300)
 
 
@@ -1053,7 +934,7 @@ Africa_prev_country_uncertainty <- ggplot(shp_africa_country) +
   labs(title = "Associated uncertainty to the \n annual prevalence of P. f in 2021 using COMAL data")
 
 
-ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_uncertainty.pdf",
+ggsave("Outputs/africa_output/Pf folder/2021_africa_pr_falciparum_map_uncertainty.pdf",
        plot = Africa_prev_country_uncertainty, width = 6, height = 4, dpi = 300)
 
 
@@ -1071,7 +952,7 @@ Africa_prev_2 <- ggplot(shp_africa) +
   theme_void()+
   labs(title = "annual prevalence of P. f in 2021 using COMAL data")
 
-ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_admin2_level.png",
+ggsave("Outputs/africa_output/Pf folder/2021_africa_pr_falciparum_map_admin2_level.pdf",
        plot = Africa_prev_2, width = 6, height = 4, dpi = 300)
 
 Africa_prev_country_2 <- ggplot(shp_africa_country) +
@@ -1086,16 +967,55 @@ Africa_prev_country_2 <- ggplot(shp_africa_country) +
   theme_void()+
   labs(title = "annual prevalence of P. f in 2021 using COMAL data")
 
-ggsave("Outputs/africa_output/2021_africa_pr_falciparum_map_country_level.pdf",
+ggsave("Outputs/africa_output/Pf folder/2021_africa_pr_falciparum_map_country_level.pdf",
        plot = Africa_prev_country_2, width = 6, height = 4, dpi = 300)
 
+
+grid_sf_africa_mask_stable_raster$CI_width <- grid_sf_africa_mask_stable_raster$pred_q95 - grid_sf_africa_mask_stable_raster$pred_q05
+
+Africa_prev_country_uncertainty_stable <- ggplot(shp_africa_country) +
+  geom_spatraster(data = grid_sf_africa_mask_stable_raster,
+                  mapping = aes(fill = CI_width))+
+  geom_sf(fill = NA)+
+  scale_fill_stepsn(
+    colours = rev(brewer.pal(5, "RdYlGn")),
+    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    na.value = "transparent",
+    name = "Credible intervale width\n of the estimated prevalence")+
+  theme_void()+
+  labs(title = "Associated uncertainty to the \n annual prevalence of P. f in 2021 using COMAL data")
+
+
+ggsave("Outputs/africa_output/Pf folder/2021_africa_pr_falciparum_map_uncertainty_stable.pdf",
+       plot = Africa_prev_country_uncertainty_stable, width = 6, height = 4, dpi = 300)
 
 
 ```
 
+
 ```{r}
 sampled_data_join_sf <- st_read("data/Africa_data/sampled_data_join_sf.gpkg")
 shp_africa <- st_read("data/Africa_data/shp_africa/Africa_simplified.shp") %>% st_transform(3857)
+
+#1. Variables to be scale
+vars_to_scale <- c("annual_rainfall_2021", "annual_temperature_2021", 
+                   "pop_density_2020", "dist_to_water", "elevation")
+
+# 2. Create a named list to store the training parameters (Means and SDs)
+scaling_stats <- list()
+
+# 3. Scale the observed data and extract the parameters
+for (var in vars_to_scale) {
+  # Calculate mean and standard deviation from the 36 observed points
+  mean_val <- mean(sampled_data_join_sf[[var]], na.rm = TRUE)
+  sd_val   <- sd(sampled_data_join_sf[[var]], na.rm = TRUE)
+  
+  # Store them for later use on the grid
+  scaling_stats[[var]] <- c(mean = mean_val, sd = sd_val)
+  
+  # Apply the scaling to the observed data
+  sampled_data_join_sf[[var]] <- (sampled_data_join_sf[[var]] - mean_val) / sd_val
+}
 
 Africa_union <- st_union(shp_africa )
 
@@ -1114,8 +1034,8 @@ sampled_data_join_sf$lat <- coords_Africa[,2]
 mesh <- inla.mesh.2d(
   loc      = coords_Africa,
   boundary = inla.sp2segment(Africa_union_sp),
-  max.edge = c(1000e3, 2000e3),   
-  cutoff   = 250e3,
+  max.edge = c(50e3, 2000e3),   
+  cutoff   = 25e3,
   offset   = c(1000e3, 2000e3))
 
 
@@ -1125,13 +1045,12 @@ mesh <- inla.mesh.2d(
 
 spde <- inla.spde2.pcmatern(
   mesh = mesh,
-  prior.range = c(100000, 0.5),
+  prior.range = c(50000, 0.5),
   prior.sigma = c(0.2, 0.5))
 
 s.index <- inla.spde.make.index(
   name = "spatial",
-  n.spde = spde$n.spde
-)
+  n.spde = spde$n.spde)
 #=========================================================
 # CANDIDATE MODELS
 #=========================================================
@@ -1266,7 +1185,7 @@ run_random_cv <- function(data, covariates, mesh, spde, s.index){
     stack.est <- inla.stack(
 
       data = list(
-        y = train$Number_of_infected_tot_pm,
+        y = train$Number_of_infected_tot_pf,
         Ntrials =
           train$Number_of_participant_tot
       ),
@@ -1445,9 +1364,8 @@ print(model_comparison)
 
 write.csv(
   model_comparison,
-  "Outputs/africa_output/RandomCV_Model_Comparison.csv",
-  row.names = FALSE
-)
+  "Outputs/africa_output/RandomCV_Model_Comparison_pf.csv",
+  row.names = FALSE)
 ```
 
 ```{r}
