@@ -35,6 +35,57 @@ fill_by_nearest <- function(sf_obj, colname) {
   sf_obj
 }
 
+
+# distance to water
+
+# ------------------------------------------------------------------
+# Idea: densify rivers and lake shorelines into points every
+# `spacing_m` meters, then do a nearest-neighbor search with a KD-tree.
+# Error <= spacing_m / 2 (250 m for 500 m spacing), memory is small.
+# Points are converted to 3D coordinates on the globe, so distances
+# are valid everywhere in Africa (no projection distortion).
+# ------------------------------------------------------------------
+
+spacing_m <- 500
+min_order <- 1      # Strahler filter. 1 = all rivers (modeling choice!)
+R <- 6371008.8      # mean Earth radius (m)
+
+# put every location in a coordinate system where plain straight-line distance is correct everywhere
+to_xyz <- function(lonlat) {
+  lon <- lonlat[, 1] * pi / 180
+  lat <- lonlat[, 2] * pi / 180
+  cbind(R * cos(lat) * cos(lon), R * cos(lat) * sin(lon), R * sin(lat))
+}
+
+# correct for the fact that the KD-tree measures a straight 
+# line through the Earth, not the path along its surface
+
+chord_to_arc <- function(d) 2 * R * asin(pmin(d / (2 * R), 1))
+
+# Densify geometries in chunks and return xyz points
+# turn rivers and shorelines into many closely spaced 3D points, so that 
+# "distance to a line" becomes "distance to the nearest point"
+
+densify_xyz <- function(geom, spacing_m, chunk = 50000) {
+  idx <- split(seq_along(geom), ceiling(seq_along(geom) / chunk))
+  out <- lapply(idx, function(i) {
+    g <- st_segmentize(geom[i], units::set_units(spacing_m, "m"))  # adds vertices so that no two are more than 500 m apart
+    to_xyz(st_coordinates(g)[, 1:2, drop = FALSE])                 # extracts vertices
+  })
+  do.call(rbind, out)
+}
+
+# Nearest distance (m, great-circle) from query points to a point cloud
+# for every query point (a centroid), find the distance to the closest point of the water cloud
+
+nn_dist <- function(xyz_water, xyz_query, chunk = 100000) {
+  idx <- split(seq_len(nrow(xyz_query)), ceiling(seq_len(nrow(xyz_query)) / chunk))
+  d <- unlist(lapply(idx, function(i)
+    nabor::knn(data = xyz_water,
+               query = xyz_query[i, , drop = FALSE],
+               k = 1)$nn.dists[, 1]))
+  chord_to_arc(d)
+}
 ################################################################################
 #                                Loading the data                              #
 ################################################################################
@@ -1032,7 +1083,7 @@ st_write(africa_pf_PR_with_coord_join_2021_sf,
 ################################################################################
 #                 case of grid cells at country level                          #
 ################################################################################
-countries1_sf <- rbind(shp_ben %>% dplyr::select(COUNTRY, NAME_3, geometry) %>% 
+countries1 <- rbind(shp_ben %>% dplyr::select(COUNTRY, NAME_3, geometry) %>% 
                          rename(country = COUNTRY,
                                 district = NAME_3), shp_con %>% dplyr::select(adm0_name,
                                                                               adm2_name,
@@ -1041,24 +1092,24 @@ countries1_sf <- rbind(shp_ben %>% dplyr::select(COUNTRY, NAME_3, geometry) %>%
                                 district = adm2_name)) 
 
 
-countries_sf <- rbind(countries1_sf, shp_cmr %>% dplyr::select(Admin2, geometry) %>% 
+countries2 <- rbind(countries1, shp_cmr %>% dplyr::select(Admin2, geometry) %>% 
                         mutate(country = "Cameroon") %>% 
                         rename(district = Admin2))
 
-countries_sf1 <- rbind(countries1_sf, shp_cmr %>% dplyr::select(Admin2, geometry) %>% 
-                         mutate(country = "Cameroon") %>% 
-                         rename(district = Admin2))
+countries3 <- rbind(countries2, shp_gab %>% dplyr::select(COUNTRY, NAME_2, geometry) %>% 
+                         rename(country = COUNTRY,
+                                district = NAME_2))
 
-countries_sf1$country_id <- as.integer(factor(countries_sf1$country))
+countries3$country_id <- as.integer(factor(countries3$country))
 
 
 # 1. Reproject countries to a metric CRS
-countries_m <- st_transform(countries_sf1, 3857)
+countries_m <- st_transform(countries3, 3857)
 
 # 2. Create bbox in the same CRS
 bbox_m <- st_bbox(countries_m) %>% st_as_sfc()
 
-# 3. Build 5 km grid (now 5000 means 5000 meters)
+# 3. Build 5 km grid 
 grid_5km <- st_make_grid(
   bbox_m,
   cellsize = 5000,
@@ -1070,11 +1121,11 @@ grid_sf <- st_sf(geometry = grid_5km)
 # 4. Intersect
 grid_sf <- st_intersection(grid_sf, countries_m)
 
-grid_vect <- vect(countries_sf %>% st_transform(4326))
+grid_vect <- vect(grid_sf %>% st_transform(4326))
 
-grid_pop <- raster::merge(ben_pop, Cong_pop, cmr_pop)
-grid_elevation <- raster::merge(elevation_ben, elevation_cmr, elevation_Cong)
-grid_NDVI <- raster::merge(ben_ndvi_stack, cmr_ndvi_stack, Cong_ndvi_stack)
+grid_pop <- raster::merge(ben_pop, Cong_pop, cmr_pop, gab_pop)
+grid_elevation <- raster::merge(elevation_ben, elevation_cmr, elevation_Cong, elevation_gab)
+grid_NDVI <- raster::merge(ben_ndvi_stack, cmr_ndvi_stack, Cong_ndvi_stack, gab_ndvi_stack)
 
 grid_land_cover_water <- crop(land_cover_water, grid_vect)
 grid_land_cover_water <- mask(grid_land_cover_water, grid_vect)
@@ -1116,32 +1167,45 @@ grid_land_cover_wetland_df <- terra::extract(grid_land_cover_wetland, grid_sf%>%
 
 # Distance to water
 
-bbox <- st_bbox(countries_sf)
-
+# ------------------------------------------------------------------
+# Data (all in EPSG:4326)
+# ------------------------------------------------------------------
+africa <- st_transform(countries3, 4326)
+wkt <- st_as_text(st_as_sfc(st_bbox(africa)))
 
 rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
-                  wkt_filter = st_as_text(st_as_sfc(bbox)))
+                  wkt_filter = wkt)
+rivers <- rivers[rivers$ORD_STRA >= min_order, ] |> st_geometry()
 
-lakes  <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
-                  wkt_filter = st_as_text(st_as_sfc(bbox)))
+lakes <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+                 wkt_filter = wkt)
+lakes_geom <- st_make_valid(st_geometry(lakes))
+shores <- st_boundary(lakes_geom)             # turns each polygon into its outline (a line)
+shores <- shores[!st_is_empty(shores)]
+shores <- st_cast(shores, "MULTILINESTRING")  # makes all the outlines one geometry type
+# Grid centroids in lon/lat
+cent <- grid_sf |> st_centroid() |> st_transform(4326)
+xyz_cent <- to_xyz(st_coordinates(cent)[, 1:2])
 
-rivers_valid <- st_make_valid(rivers)
-lakes_valid  <- st_make_valid(lakes)
+# ------------------------------------------------------------------
+# Distances
+# ------------------------------------------------------------------
+xyz_riv  <- densify_xyz(rivers, spacing_m)
+d_river  <- nn_dist(xyz_riv, xyz_cent)
+rm(xyz_riv)
 
-rivers_valid <- ms_simplify(rivers_valid, keep = 0.3, keep_shapes = TRUE)
-lakes_valid  <- ms_simplify(lakes_valid,  keep = 0.3, keep_shapes = TRUE)
+xyz_lake <- densify_xyz(shores, spacing_m)
+d_lake   <- nn_dist(xyz_lake, xyz_cent)
+rm(xyz_lake)
+
+# Centroids inside a lake: distance is 0 (the shoreline would give > 0)
+in_lake <- lengths(st_intersects(cent, lakes_geom)) > 0
+d_lake[in_lake] <- 0
 
 
+grid_sf$dist_to_water <- pmin(d_river, d_lake)
 
-# nearest river segment for each point
-nn_riv <- st_nn(grid_sf %>% st_transform(4326), rivers_valid, k = 1, returnDist = TRUE)
-dist_riv_min <- sapply(nn_riv$dist, `[`, 1)
 
-# nearest lake polygon for each point
-nn_lake <- st_nn(grid_sf%>% st_transform(4326), lakes_valid, k = 1, returnDist = TRUE)
-dist_lake_min <- sapply(nn_lake$dist, `[`, 1)
-
-grid_sf$dist_to_water <- pmin(dist_riv_min, dist_lake_min)
 
 grid_sf <- grid_sf %>% 
   mutate(annual_rainfall_2021 = grid_rainfall_2021_df[,2],
@@ -1165,7 +1229,8 @@ for (col in numeric_cols) {
 }
 
 
-st_write(grid_sf, "data/grid_data_for_prediction_sf.gpkg", append = FALSE)
+st_write(grid_sf, "data/Africa_data/Country_level_data/grid_data_for_prediction_sf.gpkg",
+         append = FALSE)
 
 ################################################################################
 #                 case of grid cells at continental level                      #
@@ -1275,54 +1340,6 @@ shp_africa_summarise <- shp_africa %>%
 
 # distance to water
 
-# ------------------------------------------------------------------
-# Idea: densify rivers and lake shorelines into points every
-# `spacing_m` meters, then do a nearest-neighbour search with a KD-tree.
-# Error <= spacing_m / 2 (250 m for 500 m spacing), memory is small.
-# Points are converted to 3D coordinates on the globe, so distances
-# are valid everywhere in Africa (no projection distortion).
-# ------------------------------------------------------------------
-
-spacing_m <- 500
-min_order <- 1      # Strahler filter. 1 = all rivers (modeling choice!)
-R <- 6371008.8      # mean Earth radius (m)
-
-# put every location in a coordinate system where plain straight-line distance is correct everywhere
-to_xyz <- function(lonlat) {
-  lon <- lonlat[, 1] * pi / 180
-  lat <- lonlat[, 2] * pi / 180
-  cbind(R * cos(lat) * cos(lon), R * cos(lat) * sin(lon), R * sin(lat))
-}
-
-# correct for the fact that the KD-tree measures a straight 
-# line through the Earth, not the path along its surface
-
-chord_to_arc <- function(d) 2 * R * asin(pmin(d / (2 * R), 1))
-
-# Densify geometries in chunks and return xyz points
-# turn rivers and shorelines into many closely spaced 3D points, so that 
-# "distance to a line" becomes "distance to the nearest point"
-
-densify_xyz <- function(geom, spacing_m, chunk = 50000) {
-  idx <- split(seq_along(geom), ceiling(seq_along(geom) / chunk))
-  out <- lapply(idx, function(i) {
-    g <- st_segmentize(geom[i], units::set_units(spacing_m, "m"))  # adds vertices so that no two are more than 500 m apart
-    to_xyz(st_coordinates(g)[, 1:2, drop = FALSE])                 # extracts vertices
-  })
-  do.call(rbind, out)
-}
-
-# Nearest distance (m, great-circle) from query points to a point cloud
-# for every query point (a centroid), find the distance to the closest point of the water cloud
-
-nn_dist <- function(xyz_water, xyz_query, chunk = 100000) {
-  idx <- split(seq_len(nrow(xyz_query)), ceiling(seq_len(nrow(xyz_query)) / chunk))
-  d <- unlist(lapply(idx, function(i)
-    nabor::knn(data = xyz_water,
-               query = xyz_query[i, , drop = FALSE],
-               k = 1)$nn.dists[, 1]))
-  chord_to_arc(d)
-}
 
 # ------------------------------------------------------------------
 # Data (all in EPSG:4326)

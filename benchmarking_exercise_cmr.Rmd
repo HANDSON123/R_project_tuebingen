@@ -304,6 +304,7 @@ vgm_mod
 plot(vgm_emp, vgm_mod)
 ```
 
+# Mesh visualization
 ```{r}
 
 pts      <- st_transform(cmr_pf_data_2011, 3857)
@@ -363,15 +364,6 @@ ggplot() +
 ```
 
 ```{r}
-spde <- inla.spde2.pcmatern(
-  mesh = mesh,
-  alpha = 2,
-  prior.range = c(90e3, 0.5),    # P(range < 120 km) = 0.5
-  prior.sigma = c(0.22, 0.5)      # weakly informative
-)
-
-A_est <- inla.spde.make.A(mesh, loc = st_coordinates(pts))
-
 
 #1. Variables to be scale
 vars_to_scale <- c("rainfall", "temperature", "pop_density", 
@@ -448,7 +440,7 @@ stk_est_intervention <- inla.stack(
 
 ```
 
-# Build the model
+# Build the model's formular
 
 ```{r}
 
@@ -479,155 +471,17 @@ formula_intervention <- y ~ -1 + intercept +
   effective_treat+
   f(spatial, model = spde)
 
-
-res <- inla(
-  formula,
-  family = "binomial",
-  Ntrials = Ntrials,
-  data = inla.stack.data(stk_est),
-  control.predictor = list(
-    A = inla.stack.A(stk_est),
-    compute = TRUE
-  ),
-  control.fixed = list(
-    mean = 0,
-    prec = 1
-  ),
-  control.compute = list(
-    dic = TRUE,
-    waic = TRUE,
-    cpo = TRUE
-  )
-)
-
-
-res_intervention <- inla(
-  formula_intervention,
-  family = "binomial",
-  Ntrials = Ntrials,
-  data = inla.stack.data(stk_est_intervention),
-  control.predictor = list(
-    A = inla.stack.A(stk_est_intervention),
-    compute = TRUE
-  ),
-  control.fixed = list(
-    mean = 0,
-    prec = 1
-  ),
-  control.compute = list(
-    dic = TRUE,
-    waic = TRUE,
-    cpo = TRUE
-  )
-)
-
-res$summary.fixed
-
-res$summary.hyperpar
-
-
-res$dic$dic
-res$waic$waic
-
-res_intervention$summary.fixed
-res_intervention$summary.hyperpar
 ```
 
-#checking for overdispersion
-```{r}
-idx_est <- inla.stack.index(stk_est, "est")$data
-
-fitted_est <- res$summary.fitted.values[idx_est, "mean"]
-
-y <- pts$positive
-n <- pts$examined
-
-pearson_res <- (y - n * fitted_est) / sqrt(n * fitted_est * (1 - fitted_est))
-
-n_obs <- length(y)
-p_eff <- res$dic$p.eff   # effective number of parameters
-
-phi <- sum(pearson_res^2) / (n_obs - p_eff)
-phi
-
-```
-
-# Model diagnostic
-```{r}
-hist(res_intervention$cpo$pit,
-     breaks = 20,
-     main = "PIT Histogram",
-     xlab = "PIT")
-
-idx_est <- inla.stack.index(stk_est_intervention, "est")$data
-
-fitted_est <- res_intervention$summary.fitted.values[idx_est, "mean"]
-
-df_resid <- as.data.frame(cbind(
-  observed = pts$positive / pts$examined,
-  fitted   = fitted_est
-))
-
-pts$resid <- (df_resid$observed - df_resid$fitted) / sqrt(df_resid$fitted * (1 - df_resid$fitted) / pts$examined)
-
-coords <- st_coordinates(pts)
-
-nb <- dnearneigh(coords, d1 = 0, d2 = 28000)   # 100 km neighbours
-lw <- nb2listw(nb, style = "W", zero.policy = TRUE)
-
-moran.test(pts$resid,
-           lw,
-           alternative = "two.sided",
-           zero.policy = TRUE)
 
 
-plot(df_resid$observed, df_resid$fitted,
-       xlab = "Observed prevalence",
-       ylab = "Fitted prevalence")
-abline(0, 1, col = "red")
-
-```
-
-The beta‑binomial SPDE model shows strong but short‑range spatial dependence (posterior range ~ 28 km, σ ~ 1.23). The PIT histogram indicates mild right‑skew, reflecting slight underestimation of very high observed prevalences, but overall calibration is acceptable. Residual Moran’s I is significantly negative (I ≈ –0.07, p ≈ 0.02), consistent with localized over‑ and under‑prediction patterns produced by the short spatial range. Compared to the binomial model, the beta‑binomial likelihood reduces residual spatial autocorrelation and improves PIT calibration. Overall, the model fits well, with only minor miscalibration in the upper tail.
+The beta‑binomial SPDE model shows strong but short‑range spatial dependence (posterior range ~ 28 km, σ ~ 1.23). The PIT histogram indicates mild right‑skew, reflecting slight underestimation of very high observed prevalence, but overall calibration is acceptable. Residual Moran’s I is significantly negative (I ~ –0.07, p ~ 0.02), consistent with localized over‑ and under‑prediction patterns produced by the short spatial range. Compared to the binomial model, the beta‑binomial likelihood reduces residual spatial autocorrelation and improves PIT calibration. Overall, the model fits well, with only minor miscalibration in the upper tail.
 
 
 ```{r}
 #=========================================================
 # 15-FOLD RANDOM CROSS-VALIDATION FOR MESH COMPARISON
 #=========================================================
-cmr_pf_data_2011 <- st_read("data/cmr_data/benchmarking_spatial_data_cmr_sf.gpkg")
-grid <- st_read("data/cmr_data/cmr_map_grid.gpkg")
-shp_cmr <- read_sf("data/cmr_data/CMR_shape_file/cameroun_districts_2024.shp")
-
-
-pts      <- st_transform(cmr_pf_data_2011, 3857)
-shp_cmr_m  <- st_transform(shp_cmr, 3857)
-
-
-mesh_1 <- fmesher::fm_mesh_2d_inla(
-  loc      = st_coordinates(pts),
-  boundary = fm_as_segm(shp_cmr_m),
-  max.edge = c(25e3, 100e3),                     # 50 km near data, 200 km outer
-  cutoff   = 10e3,                               # min distance between points (15 km)
-  offset   = c(50e3, 150e3)                      # extend mesh 50–150 km beyond country
-)
-
-mesh_2 <- fmesher::fm_mesh_2d_inla(
-  loc      = st_coordinates(pts),
-  boundary = fm_as_segm(shp_cmr_m),
-  max.edge = c(100e3, 250e3),                     # 100 km near data, 250 km outer
-  cutoff   = 50e3,                               # min distance between points (50 km)
-  offset   = c(50e3, 150e3)                      # extend mesh 50–150 km beyond country
-)
-
-
-mesh_3 <- fmesher::fm_mesh_2d_inla(
-  loc      = st_coordinates(pts),
-  boundary = fm_as_segm(shp_cmr_m),
-  max.edge = c(250e3, 500e3),                     # 250 km near data, 500 km outer
-  cutoff   = 200e3,                               # min distance between points (100 km)
-  offset   = c(50e3, 150e3)                      # extend mesh 50–150 km beyond country
-)
 
 #=========================================================
 # CREATE FIXED RANDOM FOLDS
@@ -744,21 +598,12 @@ run_mesh_cv <- function(
 
       data = list(
         y       = train$positive,
-        Ntrials = train$examined
-      ),
+        Ntrials = train$examined),
 
-      A = list(
-        A_train,
-        1
-      ),
+      A = list(A_train, 1),
 
-      effects = list(
-        spatial = s.index,
-        train_effects
-      ),
-
-      tag = "est"
-    )
+      effects = list(spatial = s.index, train_effects),
+      tag = "est")
 
     #-----------------------------------------------------
     # PREDICTION STACK
@@ -771,15 +616,9 @@ run_mesh_cv <- function(
         Ntrials = test$examined
       ),
 
-      A = list(
-        A_test,
-        1
-      ),
+      A = list(A_test, 1),
 
-      effects = list(
-        spatial = s.index,
-        test_effects
-      ),
+      effects = list(spatial = s.index, test_effects),
 
       tag = "pred"
     )
@@ -788,10 +627,7 @@ run_mesh_cv <- function(
     # COMBINE STACKS
     #-----------------------------------------------------
 
-    stk <- inla.stack(
-      stack.est,
-      stack.pred
-    )
+    stk <- inla.stack(stack.est, stack.pred)
 
     #-----------------------------------------------------
     # FORMULA
@@ -811,10 +647,7 @@ run_mesh_cv <- function(
       lc_trees +
       ITN +
       effective_treat +
-      f(
-        spatial,
-        model = spde
-      )
+      f(spatial, model = spde)
 
     #-----------------------------------------------------
     # FIT MODEL
@@ -829,35 +662,28 @@ run_mesh_cv <- function(
       Ntrials =
         inla.stack.data(stk)$Ntrials,
 
-      data =
-        inla.stack.data(stk),
+      data =inla.stack.data(stk),
 
       control.predictor = list(
         A = inla.stack.A(stk),
-        compute = TRUE
-      ),
+        compute = TRUE),
 
       control.fixed = list(
         mean = 0,
-        prec = 1
-      ),
+        prec = 1),
 
       control.compute = list(
         dic = TRUE,
         waic = TRUE,
         cpo = TRUE,
-        config = TRUE
-      )
+        config = TRUE)
     )
 
     #-----------------------------------------------------
     # POSTERIOR SAMPLING
     #-----------------------------------------------------
 
-    idx.pred <- inla.stack.index(
-      stk,
-      "pred"
-    )$data
+    idx.pred <- inla.stack.index(stk, "pred")$data
 
     samples <- inla.posterior.sample(50, fit)
     
@@ -867,70 +693,36 @@ run_mesh_cv <- function(
     idx = idx.pred
     )
 
-    prob_mat <- plogis(
-      eta_mat
-    )
+    prob_mat <- plogis(eta_mat)
 
-    pred_mean <- rowMeans(
-      prob_mat
-    )
+    pred_mean <- rowMeans(prob_mat)
 
-    pred_lower <- apply(
-      prob_mat,
-      1,
-      quantile,
-      probs = 0.025
-    )
+    pred_lower <- apply(prob_mat, 1, quantile, probs = 0.025)
 
-    pred_upper <- apply(
-      prob_mat,
-      1,
-      quantile,
-      probs = 0.975
-    )
+    pred_upper <- apply(prob_mat, 1, quantile, probs = 0.975)
 
     #-----------------------------------------------------
     # OBSERVED PREVALENCE
     #-----------------------------------------------------
 
-    obs_prev <-
-      test$positive /
-      test$examined
+    obs_prev <- test$positive / test$examined
 
     #-----------------------------------------------------
     # METRICS
     #-----------------------------------------------------
 
-    rmse <- sqrt(
-      mean(
-        (obs_prev - pred_mean)^2,
-        na.rm = TRUE
-      )
-    )
+    rmse <- sqrt(mean((obs_prev - pred_mean)^2, na.rm = TRUE))
 
-    mae <- mean(
-      abs(
-        obs_prev - pred_mean
-      ),
-      na.rm = TRUE
-    )
+    mae <- mean(abs(obs_prev - pred_mean), na.rm = TRUE)
 
-    cor_val <- cor(
-      obs_prev,
-      pred_mean,
-      use = "complete.obs"
-    )
+    cor_val <- cor(obs_prev, pred_mean, use = "complete.obs")
 
     coverage <- mean(
       obs_prev >= pred_lower &
       obs_prev <= pred_upper,
-      na.rm = TRUE
-    )
+      na.rm = TRUE)
 
-    log_cpo <- mean(
-      log(fit$cpo$cpo),
-      na.rm = TRUE
-    )
+    log_cpo <- mean(log(fit$cpo$cpo), na.rm = TRUE)
 
     fold_results[[i]] <- data.frame(
       DIC         = fit$dic$dic,
@@ -939,26 +731,13 @@ run_mesh_cv <- function(
       RMSE        = rmse,
       MAE         = mae,
       Correlation = cor_val,
-      Coverage95  = coverage
-    )
+      Coverage95  = coverage)
 
   }
 
-  fold_results <- do.call(
-    rbind,
-    fold_results
-  )
+  fold_results <- do.call(rbind, fold_results)
 
-  return(
-    as.data.frame(
-      t(
-        colMeans(
-          fold_results,
-          na.rm = TRUE
-        )
-      )
-    )
-  )
+  return(as.data.frame(t(colMeans(fold_results, na.rm = TRUE))))
 }
 
 #=========================================================
@@ -971,33 +750,16 @@ mesh_comparison <- lapply(
 
   function(m){
 
-    cat(
-      "\n\n========================================\n"
-    )
+    cat("\n\n========================================\n")
 
-    cat(
-      "RUNNING",
-      m,
-      "MESH\n"
-    )
+    cat("RUNNING", m, "MESH\n")
 
-    cat(
-      "========================================\n"
-    )
+    cat("========================================\n")
 
-    res <- run_mesh_cv(
-      data = pts,
-      mesh = mesh_list[[m]],
-      nfolds = 15
-    )
+    res <- run_mesh_cv(data = pts, mesh = mesh_list[[m]], nfolds = 15)
 
-    data.frame(
-      Mesh = m,
-      res
-    )
-  }
-
-)
+    data.frame( Mesh = m, res)
+  })
 
 #=========================================================
 # FINAL TABLE
@@ -1028,8 +790,20 @@ The 15-fold random cross-validation demonstrated a strong influence of mesh reso
 
 ```{r}
 # Build the A‑matrix for prediction locations
+
+spde <- inla.spde2.pcmatern(
+  mesh = mesh_1,
+  alpha = 2,
+  prior.range = c(90e3, 0.5),    # P(range < 120 km) = 0.5
+  prior.sigma = c(0.22, 0.5)      # weakly informative
+)
+
+A_est <- inla.spde.make.A(mesh_1, loc = st_coordinates(pts))
+
+
+
 A_pred <- inla.spde.make.A(
-  mesh = mesh,
+  mesh = mesh_1,
   loc = st_coordinates(grid)
 )
 

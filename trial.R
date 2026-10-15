@@ -35,6 +35,9 @@ country_B_union <- st_union(country_B)
 country_A_simplified <- st_simplify(country_A_union, dTolerance = 10000)
 country_B_simplified <- st_simplify(country_B_union, dTolerance = 10000)
 
+country_C_union <- st_union(countries3 %>% st_transform(3857)) 
+country_C_simplified <- st_simplify(country_C_union, dTolerance = 10000)
+
 
 # Extract geometry
 geom_A <- st_geometry(country_A_simplified)[[1]]
@@ -65,6 +68,19 @@ outer_ring_B <- geom_B[[1]]
 
 # Convert to matrix with X,Y
 boundary_B <- as.matrix(outer_ring_B)[, 1:2, drop = FALSE]
+
+geom_C <- st_geometry(country_C_simplified)[[1]]
+
+# If MULTIPOLYGON : take the first polygon
+if (inherits(geom_C, "MULTIPOLYGON")) {
+  geom_C <- geom_C[[1]]
+}
+
+# Extract the OUTER ring only (first ring)
+outer_ring_C <- geom_C[[1]]
+
+# Convert to matrix with X,Y
+boundary_C <- as.matrix(outer_ring_C)[, 1:2, drop = FALSE]
 
 
 
@@ -116,6 +132,41 @@ ggplot() +
   ggtitle("Mesh B with Country Boundary")
 
 
+mesh_C <- fmesher::fm_mesh_2d_inla(
+  loc = coords,
+  boundary   = fm_as_segm(country_C_simplified) ,
+  max.edge = c(100e3, 500e3),   # inner ~30 km, outer ~80 km
+  cutoff   = 70e3,
+  offset   = c(100e3, 500e3))
+
+# Extract triangle vertex indices
+tri <- mesh_C$graph$tv
+
+
+# Build edges from triangles
+edges_list <- list()
+
+for (i in 1:nrow(tri)) {
+  idx <- tri[i, ]
+  # Each triangle has 3 edges
+  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_C$loc[idx[c(1,2)], 1:2])
+  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_C$loc[idx[c(2,3)], 1:2])
+  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_C$loc[idx[c(3,1)], 1:2])
+}
+
+mesh_edges_sf <- st_as_sf(st_sfc(edges_list, crs = 3857))
+
+coords_df <- as.data.frame(coords)
+colnames(coords_df) <- c("X", "Y")
+
+ggplot() +
+  geom_sf(data = country_C_simplified, fill = "white", color = "black", size = 0.8) +
+  geom_sf(data = mesh_edges_sf, color = "grey60", size = 0.3) +
+  geom_point(data = coords_df, aes(X, Y), color = "red", size = 1.5) +
+  theme_minimal() +
+  ggtitle("Mesh B with Country Boundary")
+
+
 
 # Build Matérn SPDE model of the spatial field on mesh
 
@@ -139,7 +190,7 @@ w_A <- as.numeric(sf_data$country_id == 1)
 w_B <- as.numeric(sf_data$country_id == 2)
 
 # 2. Build the full matrices automatically.
-# Passing the full 'coords' matrix ensures every matrix has exactly 36 rows.
+# Passing the full 'coords' matrix ensures every matrix has exactly 57 rows.
 # The 'weights' argument forces rows from other countries to be completely zero.
 A_A_full <- inla.spde.make.A(mesh = mesh_A, loc = coords, weights = w_A)
 A_B_full <- inla.spde.make.A(mesh = mesh_B, loc = coords, weights = w_B)
@@ -275,83 +326,41 @@ A_country <- Diagonal(nrow(sf_data))
 stack_test_rainfall <- inla.stack(
   data = list(
     y       = sf_data$Number_of_infected_tot_pf,
-    Ntrials = sf_data$Number_of_participant_tot
-  ),
-  A = list(
-    A_fixed,
-    A_country,
-    A_A_full,
-    A_B_full),
-  effects = list(
-    effects_fixed_rainfall,
-    effects_country,
-    effects_A,
-    effects_B),
-  tag = "est"
-)
+    Ntrials = sf_data$Number_of_participant_tot),
+  A = list(A_fixed, A_country, A_A_full, A_B_full),
+  effects = list(effects_fixed_rainfall, effects_country, effects_A, effects_B),
+  tag = "est")
 
 stack_test_temperature <- inla.stack(
   data = list(
     y       = sf_data$Number_of_infected_tot_pf,
-    Ntrials = sf_data$Number_of_participant_tot
-  ),
-  A = list(
-    A_fixed,
-    A_country,
-    A_A_full,
-    A_B_full),
-  effects = list(
-    effects_fixed_temperature,
-    effects_country,
-    effects_A,
-    effects_B),
-  tag = "est"
-)
+    Ntrials = sf_data$Number_of_participant_tot),
+  A = list(A_fixed, A_country, A_A_full, A_B_full),
+  effects = list(effects_fixed_temperature, effects_country, effects_A, effects_B),
+  tag = "est")
 
 
 stack_test_elevation <- inla.stack(
   data = list(
     y       = sf_data$Number_of_infected_tot_pf,
-    Ntrials = sf_data$Number_of_participant_tot
-  ),
-  A = list(
-    A_fixed,
-    A_country,
-    A_A_full,
-    A_B_full),
-  effects = list(
-    effects_elevation,
-    effects_country,
-    effects_A,
-    effects_B),
-  tag = "est"
-)
+    Ntrials = sf_data$Number_of_participant_tot),
+  A = list(A_fixed, A_country, A_A_full, A_B_full),
+  effects = list(effects_elevation, effects_country, effects_A, effects_B),
+  tag = "est")
 
 
 stack_test_baseline <- inla.stack(
   data = list(
     y       = sf_data$Number_of_infected_tot_pf,
-    Ntrials = sf_data$Number_of_participant_tot
-  ),
-  A = list(
-    A_fixed,
-    A_country,
-    A_A_full,
-    A_B_full),
-  effects = list(
-    effects_fixed_baseline,
-    effects_country,
-    effects_A,
-    effects_B),
-  tag = "est"
-)
+    Ntrials = sf_data$Number_of_participant_tot),
+  A = list(A_fixed, A_country, A_A_full, A_B_full),
+  effects = list(effects_fixed_baseline, effects_country, effects_A, effects_B),
+  tag = "est")
 
 
 # Penalize complexity which control how much countries differ from each other through
 # the country level random effect
-hyper_country <- list(
-  prec = list(prior = "pc.prec", param = c(0.5, 0.5))
-)
+hyper_country <- list(prec = list(prior = "pc.prec", param = c(0.5, 0.5)))
 
 formula_rainfall <- y ~
   -1 +
