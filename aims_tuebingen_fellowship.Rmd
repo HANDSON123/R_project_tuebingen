@@ -76,6 +76,7 @@ con_vect <- vect(shp_con)
 gab_vect <- vect(shp_gab)
 
 sampled_data_join_sf <- st_read("data/Africa_data/sampled_data_join_sf.gpkg")
+spatial_data_gab     <- st_read("data/gab_data/GAB_df_1_sf.gpkg")
 
 ```
 
@@ -107,12 +108,33 @@ phi <- sum(pearson_res1^2) / glm_binom1$df.residual
 
 phi
 
+spatial_data_gab <- sampled_data_join_sf %>% 
+  mutate(annual_rainfall_2021    = as.numeric(scale(annual_rainfall_2021)),
+         annual_temperature_2021 = as.numeric(scale(annual_temperature_2021)),
+         pop_density_2020        = as.numeric(scale(pop_density_2020)),
+         dist_to_water           = as.numeric(scale(dist_to_water)),
+         elevation               = as.numeric(scale(elevation)),
+         vegetation_index        = as.numeric(scale(vegetation_index)))
+
+
+glm_binom1 <- glm(
+  cbind(Number_of_infected_tot_pm, Number_of_participant_tot - Number_of_infected_tot_pm) ~ 1,
+  family = "binomial",
+  data = spatial_data_gab
+)
+
+pearson_res1 <- residuals(glm_binom1, type = "pearson")
+
+phi <- sum(pearson_res1^2) / glm_binom1$df.residual
+
+phi
+
 glm_binom2 <- glm(
   cbind(Number_of_infected_tot_pm, Number_of_participant_tot - Number_of_infected_tot_pm) ~
-    annual_rainfall_2021 + pop_density_2020 + dist_to_water + lc_water + lc_trees + lc_cropland +
-    lc_built + lc_wetland,
+    annual_rainfall_2021 + pop_density_2020 + dist_to_water + lc_trees + annual_temperature_2021 +
+    lc_built + vegetation_index,
   family = "binomial",
-  data = sampled_data_join_sf_scale
+  data = spatial_data_gab
 )
 
 pearson_res2 <- residuals(glm_binom2, type = "pearson")
@@ -226,20 +248,23 @@ vif(fit1)
 # variogram, autocorrelation and prior ajustment
 
 ```{r}
-# # Project to meters (important)
-# 
-# sf_data <- st_transform(sampled_data_join_sf, 3857)
-# 
-# # Empirical variogram
-# 
-# v <- variogram(PR_Pm_tot ~ 1, data = sf_data)  # adjust cutoff to country size
-# # fit an exponential model
-# v.fit <- fit.variogram(v, model = vgm("Sph"))
-# 
-# # plot empirical + fitted curve
-# plot(v, v.fit)
-# 
-# plot(v)
+# Project to meters (important)
+
+sf_data <- st_transform(sampled_data_join_sf, 3857)
+
+# Empirical variogram
+
+sf_data$logit_pm <- qlogis(
+  pmin(pmax(sf_data$PR_Pm_tot, 0.001), 0.999))
+
+v <- variogram(PR_Pm_tot ~ 1, data = sf_data)  # adjust cutoff to country size
+# fit an exponential model
+v.fit <- fit.variogram(v, model = vgm("Sph"))
+
+# plot empirical + fitted curve
+plot(v, v.fit)
+
+plot(v)
 
 ```
 
@@ -487,7 +512,7 @@ stk_est_temperature <- inla.stack(
 
 stk_est_elevation <- inla.stack(
   data = list(
-    y       = sampled_data_join_sf$Number_of_infected_tot_pf,
+    y       = sampled_data_join_sf$Number_of_infected_tot_pm,
     Ntrials = sampled_data_join_sf$Number_of_participant_tot
   ),
   A = list(A_est, 1),
@@ -556,26 +581,6 @@ formula_baseline <- y ~
 # Model selection via cross-validation
 
 ```{r}
-#1. Variables to be scale
-vars_to_scale <- c("annual_rainfall_2021", "annual_temperature_2021", 
-                   "pop_density_2020", "dist_to_water", "elevation")
-
-# 2. Create a named list to store the training parameters (Means and SDs)
-scaling_stats <- list()
-
-# 3. Scale the observed data and extract the parameters
-for (var in vars_to_scale) {
-  # Calculate mean and standard deviation from the 36 observed points
-  mean_val <- mean(sampled_data_join_sf[[var]], na.rm = TRUE)
-  sd_val   <- sd(sampled_data_join_sf[[var]], na.rm = TRUE)
-  
-  # Store them for later use on the grid
-  scaling_stats[[var]] <- c(mean = mean_val, sd = sd_val)
-  
-  # Apply the scaling to the observed data
-  sampled_data_join_sf[[var]] <- (sampled_data_join_sf[[var]] - mean_val) / sd_val
-}
-
 Africa_union <- st_union(shp_africa)
 
 sampled_data_join_sf <- sampled_data_join_sf %>% st_transform(3857)
@@ -594,7 +599,7 @@ mesh <- inla.mesh.2d(
   loc      = coords_Africa,
   boundary = inla.sp2segment(Africa_union_sp),
   max.edge = c(50e3, 2000e3),   
-  cutoff   = 25e3,
+  cutoff   = 50e3,
   offset   = c(1000e3, 2000e3))
 
 
@@ -794,7 +799,7 @@ run_random_cv <- function(data, covariates, mesh, spde, s.index){
 
     idx.pred <- inla.stack.index(stk, "pred")$data
 
-    samples <- inla.posterior.sample(200, fit)
+    samples <- inla.posterior.sample(100, fit)
     
     eta_mat <- inla.posterior.sample.eval(
     function(idx) APredictor[idx],
@@ -814,7 +819,7 @@ run_random_cv <- function(data, covariates, mesh, spde, s.index){
     # OBSERVED PREVALENCE
     #-----------------------------------------------------
 
-    obs_prev <- test$Number_of_infected_tot_pm / test$Number_of_participant_tot
+    obs_prev <- test$Number_of_infected_tot_pf / test$Number_of_participant_tot
 
     #-----------------------------------------------------
     # METRICS
@@ -846,7 +851,16 @@ run_random_cv <- function(data, covariates, mesh, spde, s.index){
 
   fold_results <- do.call(rbind, fold_results)
 
-  as.data.frame(t(colMeans(fold_results, na.rm = TRUE)))
+  means  <- sapply(fold_results, mean, na.rm = TRUE)
+  lower <- sapply(fold_results,
+                  function(x) unname(quantile(x, 0.025, na.rm = TRUE)))
+
+  upper <- sapply(fold_results,
+                  function(x) unname(quantile(x, 0.975, na.rm = TRUE)))
+    
+  as.data.frame(t(c(means,
+      setNames(lower, paste0(names(lower), "_L")),
+      setNames(upper, paste0(names(upper), "_U")))))
 }
 
 #=========================================================
@@ -886,6 +900,56 @@ write.csv(
   model_comparison,
   "Outputs/africa_output/RandomCV_Model_Comparison_pf.csv",
   row.names = FALSE)
+
+
+# Metrics you want to plot
+metrics <- c("RMSE", "MAE", "LogCPO", "DIC", "WAIC")
+
+# Build long table
+forest_df <- bind_rows(
+  lapply(metrics, function(m){
+
+    data.frame(
+      Model  = model_comparison$Model,
+      Metric = m,
+      Mean   = model_comparison[[m]],
+      Lower  = model_comparison[[paste0(m, "_L")]],
+      Upper  = model_comparison[[paste0(m, "_U")]]
+    )
+
+  }))
+
+# Reorder models separately within each facet
+
+higher_better <- c("Correlation", "Coverage95", "LogCPO")
+
+# Identify best model in each metric
+forest_df1 <- forest_df %>%
+  group_by(Metric) %>%
+  mutate(Best = if(Metric[1] %in% higher_better) {
+    Mean == max(Mean, na.rm = TRUE)
+    } else {
+      Mean == min(Mean, na.rm = TRUE)
+    }) %>%
+  arrange(Mean, .by_group = TRUE) %>%
+  mutate(Model_ordered = factor(Model, levels = Model)) %>%
+  ungroup()
+
+Model_selec <- ggplot(forest_df1, aes(x = Mean, y = Model_ordered, colour = Best)) +
+  geom_errorbarh(aes(xmin = Lower, xmax = Upper),
+    height = 0.2,
+    linewidth = 0.8) +
+  geom_point(size = 3) +
+  facet_wrap(~ Metric, scales = "free_x") +
+  labs(title = "Model Comparison Forest Plot",
+    x = NULL, y = NULL) +
+  theme_bw() +
+  theme(strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank())
+
+ggsave("Outputs/africa_output/Model_selection_criterials_pf.png",
+       plot = Model_selec, width = 6, height = 4, dpi = 300)
+
 ```
 
 
@@ -920,7 +984,7 @@ res_elevation <- inla(
     config = TRUE)
 )
 
-n_tiles <- 1000
+n_tiles <- 50
 tile_id <- cut(seq_len(nrow(grid_sf_africa)),
                breaks = n_tiles,
                labels = FALSE)
@@ -1204,14 +1268,6 @@ ggsave("Outputs/africa_output/Pf folder/2021_africa_pr_falciparum_map_uncertaint
 
 ```
 
-
-```{r}
-
-```
-
-```{r}
-
-```
 
 # Estimation of the prevalence in only the four countries where data were collected
 
@@ -1586,7 +1642,7 @@ write.csv(
 
 ```{r}
 # Metrics you want to plot
-metrics <- c("RMSE", "LogCPO", "DIC", "WAIC")
+metrics <- c("RMSE", "MAE", "LogCPO", "DIC", "WAIC")
 
 # Build long table
 forest_df <- bind_rows(
@@ -1618,23 +1674,21 @@ forest_df1 <- forest_df %>%
   mutate(Model_ordered = factor(Model, levels = Model)) %>%
   ungroup()
 
-forest_df <- forest_df %>%
-  group_by(Metric) %>%
-  arrange(Mean, .by_group = TRUE) %>%
-  mutate(Model_ordered = factor(Model, levels = Model)) %>%
-  ungroup()
-
-
-ggplot(forest_df1, aes(x = Mean, y = Model_ordered, colour = Best)) +
+Model_selec <- ggplot(forest_df1, aes(x = Mean, y = Model_ordered, colour = Best)) +
   geom_errorbarh(aes(xmin = Lower, xmax = Upper),
     height = 0.2,
     linewidth = 0.8) +
   geom_point(size = 3) +
   facet_wrap(~ Metric, scales = "free_x") +
-  labs(x = NULL, y = NULL) +
+  labs(title = "Model Comparison Forest Plot",
+    x = NULL, y = NULL) +
   theme_bw() +
   theme(strip.text = element_text(face = "bold"),
     panel.grid.minor = element_blank())
+
+ggsave("Outputs/africa_output/Model_selection_criterials.pdf",
+       plot = Model_selec, width = 6, height = 4, dpi = 300)
+
 ```
 
 
@@ -1835,7 +1889,39 @@ grid_sf_africa$pred_q95  <- pred_q95
 # grid_sf_africa$pred_q05  <- pred_q05
 # grid_sf_africa$pred_q95  <- pred_q95
 
-res_elevation$summary.hyperpar
+res_elevation$summary.fixed
+
+fixed_effects <- data.frame(
+  Covariate = rownames(res_elevation$summary.fixed),
+  Mean = res_elevation$summary.fixed$mean,
+  Lower95 = res_elevation$summary.fixed$`0.025quant`,
+  Upper95 = res_elevation$summary.fixed$`0.975quant`
+)
+
+
+Model_selec <- ggplot(fixed_effects, aes(x = Mean, y = Covariate)) +
+  geom_errorbarh(
+    aes(xmin = Lower95, xmax = Upper95),
+    height = 0.2,
+    linewidth = 0.8
+  ) +
+  geom_point(size = 3) +
+  geom_vline(xintercept = 0,
+             colour = "red",
+             linetype = "dashed") +
+  labs(
+    title = "Model Summary Forest Plot",
+    x = "Posterior mean (95% CrI)",
+    y = NULL
+  ) +
+  theme_bw() +
+  theme(
+    panel.grid.minor = element_blank()
+  )
+
+
+ggsave("Outputs/africa_output/Model_summary_pm.pdf",
+       plot = Model_selec, width = 6, height = 4, dpi = 300)
 
 ```
 
@@ -1951,12 +2037,12 @@ ben_raster1 <- ggplot(shp_ben) +
     colours = rev(brewer.pal(5, "RdYlGn")),
     breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
     na.value = "transparent",
-    name = "annual prevalence of P. m")+
+    name = "annual prevalence of P. f")+
   theme_void()+
-  labs(title = "annual prevalence of P. m in Benin using COMAL data")
+  labs(title = "annual prevalence of P. f in Benin using COMAL data")
 
 
-ggsave("Outputs/ben_output/Pm_pr_estimated/2021_benin_pm.pdf",
+ggsave("Outputs/ben_output/Pf_pr_estimated/2021_benin_pf.png",
        plot = ben_raster1, width = 6, height = 4, dpi = 300)
 
 ben_pr_pm$CI_width <- ben_pr_pm$pred_q95 - ben_pr_pm$pred_q05
@@ -1974,7 +2060,7 @@ ben_raster2 <- ggplot(shp_ben) +
   labs(title = "Prevalence estimates uncertainty")
 
 
-ggsave("Outputs/ben_output/Pm_pr_estimated/2021_benin_pm_uncertainty.pdf",
+ggsave("Outputs/ben_output/Pf_pr_estimated/2021_benin_pf_uncertainty.png",
        plot = ben_raster2, width = 6, height = 4, dpi = 300)
 
 
@@ -1986,12 +2072,12 @@ cmr_raster1 <- ggplot(shp_cmr) +
     colours = rev(brewer.pal(5, "RdYlGn")),
     breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
     na.value = "transparent",
-    name = "annual prevalence of P. m")+
+    name = "annual prevalence of P. f")+
   theme_void()+
-  labs(title = "annual prevalence of P. m in Cameroon using COMAL data")
+  labs(title = "annual prevalence of P. f in Cameroon using COMAL data")
 
 
-ggsave("Outputs/cmr_output/Pm_pr_estimated/2021_cameroon_pm.pdf",
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2021_cameroon_pf.png",
        plot = cmr_raster1, width = 6, height = 4, dpi = 300)
 
 cmr_pr_pm$CI_width <- cmr_pr_pm$pred_q95 - cmr_pr_pm$pred_q05
@@ -2009,7 +2095,7 @@ cmr_raster2 <- ggplot(shp_cmr) +
   labs(title = "Prevalence estimates uncertainty")
 
 
-ggsave("Outputs/cmr_output/Pm_pr_estimated/2021_cameroon_pm_uncertainty.pdf",
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2021_cameroon_pf_uncertainty.png",
        plot = cmr_raster2, width = 6, height = 4, dpi = 300)
 
 
@@ -2021,12 +2107,12 @@ gab_raster1 <- ggplot(shp_gab) +
     colours = rev(brewer.pal(5, "RdYlGn")),
     breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
     na.value = "transparent",
-    name = "annual prevalence of P. m")+
+    name = "annual prevalence of P. f")+
   theme_void()+
-  labs(title = "annual prevalence of P. m in Gabon using COMAL data")
+  labs(title = "annual prevalence of P. f in Gabon using COMAL data")
 
 
-ggsave("Outputs/gab_output/Pm_pr_estimated/2021_gabon_pm.pdf",
+ggsave("Outputs/gab_output/Pf_pr_estimated/2021_gabon_pf.png",
        plot = gab_raster1, width = 6, height = 4, dpi = 300)
 
 gab_pr_pm$CI_width <- gab_pr_pm$pred_q95 - gab_pr_pm$pred_q05
@@ -2044,7 +2130,7 @@ gab_raster2 <- ggplot(shp_gab) +
   labs(title = "Prevalence estimates uncertainty")
 
 
-ggsave("Outputs/gab_output/Pm_pr_estimated/2021_gabon_pm_uncertainty.pdf",
+ggsave("Outputs/gab_output/Pf_pr_estimated/2021_gabon_pf_uncertainty.png",
        plot = gab_raster2, width = 6, height = 4, dpi = 300)
 
 
@@ -2056,12 +2142,12 @@ cong_raster1 <- ggplot(shp_con) +
     colours = rev(brewer.pal(5, "RdYlGn")),
     breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
     na.value = "transparent",
-    name = "annual prevalence of P. m")+
+    name = "annual prevalence of P. f")+
   theme_void()+
-  labs(title = "annual prevalence of P. m in Congo using COMAL data")
+  labs(title = "annual prevalence of P. f in Congo using COMAL data")
 
 
-ggsave("Outputs/cong_output/Pm_pr_estimated/2021_congo_pm.pdf",
+ggsave("Outputs/cong_output/Pf_pr_estimated/2021_congo_pf.png",
        plot = cong_raster1, width = 6, height = 4, dpi = 300)
 
 cong_pr_pm$CI_width <- cong_pr_pm$pred_q95 - cong_pr_pm$pred_q05
@@ -2079,7 +2165,7 @@ con_raster2 <- ggplot(shp_con) +
   labs(title = "Prevalence estimates uncertainty")
 
 
-ggsave("Outputs/cong_output/Pm_pr_estimated/2021_congo_pm_uncertainty.pdf",
+ggsave("Outputs/cong_output/Pf_pr_estimated/2021_congo_pf_uncertainty.png",
        plot = con_raster2, width = 6, height = 4, dpi = 300)
 
 ```
@@ -2091,13 +2177,13 @@ ben_admin1 <- ggplot(ben_pr_pm_shp)+
     colours = rev(brewer.pal(5, "RdYlGn")),
     breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
     limits = c(0, 1),
-    name = "Prevalence of P. malariae",
+    name = "Prevalence of P. falciparum",
     na.value = "transparent"
   )+
   theme_void()+
-  labs(title = "annual prevalence of P. m in Benin using COMAL data")
+  labs(title = "annual prevalence of P. f in Benin using COMAL data")
 
-ggsave("Outputs/ben_output/Pm_pr_estimated/2021_benin_pm_admin_level.pdf",
+ggsave("Outputs/ben_output/Pf_pr_estimated/2021_benin_pf_admin_level.png",
        plot = ben_admin1, width = 6, height = 4, dpi = 300)
 
 ben_admin2 <- ggplot(ben_pr_pm_shp)+
@@ -2112,7 +2198,7 @@ ben_admin2 <- ggplot(ben_pr_pm_shp)+
   theme_void()+
   labs(title = "Prevalence estimates uncertainty")
 
-ggsave("Outputs/ben_output/Pm_pr_estimated/2021_benin_pm_admin_level_uncertainty.pdf",
+ggsave("Outputs/ben_output/Pf_pr_estimated/2021_benin_pf_admin_level_uncertainty.png",
        plot = ben_admin2, width = 6, height = 4, dpi = 300)
 
 
@@ -2122,12 +2208,12 @@ cmr_admin1 <- ggplot(cmr_pr_pm_shp)+
     colours = rev(brewer.pal(5, "RdYlGn")),
     breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
     limits = c(0, 1),
-    name = "Prevalence of P. malariae",
+    name = "Prevalence of P. falciparum",
     na.value = "transparent")+
   theme_void()+
-  labs(title = "annual prevalence of P. m in Cameroon using COMAL data")
+  labs(title = "annual prevalence of P. f in Cameroon using COMAL data")
 
-ggsave("Outputs/cmr_output/Pm_pr_estimated/2021_cameroon_pm_admin_level.pdf",
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2021_cameroon_pf_admin_level.png",
        plot = cmr_admin1, width = 6, height = 4, dpi = 300)
 
 cmr_admin2 <- ggplot(cmr_pr_pm_shp)+
@@ -2142,7 +2228,7 @@ cmr_admin2 <- ggplot(cmr_pr_pm_shp)+
   theme_void()+
   labs(title = "Prevalence estimates uncertainty")
 
-ggsave("Outputs/cmr_output/Pm_pr_estimated/2021_cameroon_pm_admin_level_uncertainty.pdf",
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2021_cameroon_pf_admin_level_uncertainty.png",
        plot = cmr_admin2, width = 6, height = 4, dpi = 300)
 
 
@@ -2152,12 +2238,12 @@ gab_admin1 <- ggplot(gab_pr_pm_shp)+
     colours = rev(brewer.pal(5, "RdYlGn")),
     breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
     limits = c(0, 1),
-    name = "Prevalence of P. malariae",
+    name = "Prevalence of P. falciparum",
     na.value = "transparent")+
   theme_void()+
-  labs(title = "annual prevalence of P. m in Gabon using COMAL data")
+  labs(title = "annual prevalence of P. f in Gabon using COMAL data")
 
-ggsave("Outputs/gab_output/Pm_pr_estimated/2021_gabon_pm_admin_level.pdf",
+ggsave("Outputs/gab_output/Pf_pr_estimated/2021_gabon_pf_admin_level.png",
        plot = gab_admin1, width = 6, height = 4, dpi = 300)
 
 gab_admin2 <- ggplot(gab_pr_pm_shp)+
@@ -2172,7 +2258,7 @@ gab_admin2 <- ggplot(gab_pr_pm_shp)+
   theme_void()+
   labs(title = "Prevalence estimates uncertainty")
 
-ggsave("Outputs/gab_output/Pm_pr_estimated/2021_gabon_pm_admin_level_uncertainty.pdf",
+ggsave("Outputs/gab_output/Pf_pr_estimated/2021_gabon_pf_admin_level_uncertainty.png",
        plot = gab_admin2, width = 6, height = 4, dpi = 300)
 
 
@@ -2182,12 +2268,12 @@ con_admin1 <- ggplot(cong_pr_pm_shp)+
     colours = rev(brewer.pal(5, "RdYlGn")),
     breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
     limits = c(0, 1),
-    name = "Prevalence of P. malariae",
+    name = "Prevalence of P. falciparum",
     na.value = "transparent")+
   theme_void()+
-  labs(title = "annual prevalence of P. m in Congo using COMAL data")
+  labs(title = "annual prevalence of P. f in Congo using COMAL data")
 
-ggsave("Outputs/cong_output/Pm_pr_estimated/2021_congo_pm_admin_level.pdf",
+ggsave("Outputs/cong_output/Pf_pr_estimated/2021_congo_pf_admin_level.png",
        plot = con_admin1, width = 6, height = 4, dpi = 300)
 
 con_admin2 <- ggplot(cong_pr_pm_shp)+
@@ -2202,20 +2288,115 @@ con_admin2 <- ggplot(cong_pr_pm_shp)+
   theme_void()+
   labs(title = "Prevalence estimates uncertainty")
 
-ggsave("Outputs/cong_output/Pm_pr_estimated/2021_congo_pm_admin_level_uncertainty.pdf",
+ggsave("Outputs/cong_output/Pf_pr_estimated/2021_congo_pf_admin_level_uncertainty.png",
        plot = con_admin2, width = 6, height = 4, dpi = 300)
 
 ```
 
+
+# Gabon only prevalence estimation
 ```{r}
+spatial_data_gab     <- st_read("data/gab_data/GAB_df_1_sf.gpkg")
+selected_covariate <- c("annual_rainfall_2021", "annual_temperature_2021",
+               "pop_density_2020", "dist_to_water", "vegetation_index",
+               "lc_trees", "lc_built")
+
+numeric_data <- spatial_data_gab[, selected_covariate]
+numeric_data <- numeric_data %>% st_drop_geometry()
+corr_coef <- cor(numeric_data, use =  "pairwise.complete.obs")
+
+corrplot(corr_coef,
+         method = "color",
+         type = "upper",
+         addCoef.col = "black",
+         tl.col = "black")
+
+
+selected_covariate_final <- c("annual_rainfall_2021", "annual_temperature_2021",
+               "dist_to_water", "lc_built")
+
+numeric_data <- numeric_data[, selected_covariate_final] 
+corr_coef <- cor(numeric_data, use =  "pairwise.complete.obs")
+
+corrplot(corr_coef,
+         method = "color",
+         type = "upper",
+         addCoef.col = "black",
+         tl.col = "black")
+
 
 ```
 
 ```{r}
+# Project to meters (important)
+
+sf_data <- st_transform(spatial_data_gab, 3857)
+
+# Empirical variogram
+
+sf_data$logit_pm <- qlogis(
+  pmin(pmax(sf_data$PR_Pm_tot, 0.001), 0.999))
+
+v <- variogram(PR_Pm_tot ~ 1, data = sf_data)  # adjust cutoff to country size
+# fit an exponential model
+v.fit <- fit.variogram(v, model = vgm("Exp"))
+
+# plot empirical + fitted curve
+plot(v, v.fit)
+
+plot(v)
 
 ```
 
 ```{r}
+grid_sf_gabon <- st_read("data/gab_data/gab_map_grid.gpkg")
+
+
+shp_gabon <- st_read("data/gab_data/gab_shape/gadm41_GAB_2.shp") %>% st_transform(3857)
+
+gabon_union <- st_union(shp_gabon)
+
+spatial_data_gab <- spatial_data_gab %>% st_transform(3857)
+
+spatial_data_gab_sp     <- as(spatial_data_gab, "Spatial")
+gabon_union_sp <- as(gabon_union, "Spatial")
+
+coords_gabon<- coordinates(spatial_data_gab_sp)
+
+
+mesh_gabon <- inla.mesh.2d(
+  loc      = coords_gabon,
+  boundary = inla.sp2segment(gabon_union_sp),
+  max.edge = c(25e3, 200e3),   
+  cutoff   = 100e3,
+  offset   = c(100e3, 200e3))
+
+# Extract triangle vertex indices
+tri <- mesh_gabon$graph$tv
+
+
+# Build edges from triangles
+edges_list <- list()
+
+for (i in 1:nrow(tri)) {
+  idx <- tri[i, ]
+  # Each triangle has 3 edges
+  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_gabon$loc[idx[c(1,2)], 1:2])
+  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_gabon$loc[idx[c(2,3)], 1:2])
+  edges_list[[length(edges_list) + 1]] <- st_linestring(mesh_gabon$loc[idx[c(3,1)], 1:2])
+}
+
+mesh_edges_sf <- st_as_sf(st_sfc(edges_list, crs = 3857))
+
+coords_df_gabon <- as.data.frame(coords_gabon)
+colnames(coords_df_gabon) <- c("X", "Y")
+
+ggplot() +
+  geom_sf(data = mesh_edges_sf, fill = NA, color = "grey60", size = 0.3) +
+  geom_sf(data = gabon_union, fill = NA, color = "black", size = 0.8) +
+  geom_point(data = coords_df_gabon, aes(X, Y), color = "red", size = 1.5) +
+  theme_minimal() +
+  ggtitle("Mesh for Gabon with Boundary")
 
 ```
 

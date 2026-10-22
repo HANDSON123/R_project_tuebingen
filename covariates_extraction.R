@@ -99,6 +99,12 @@ spatial_data_ben     <- st_read("data/ben_data/spatial_data_sample_ben.gpkg")
 
 spatial_data_cong    <- st_read("data/cong_data/spatial_data_sample_cong.gpkg")
 
+cmr_raw_pr_mix       <- read.csv("data/cmr_data/cmr_MAP_full_raw_prevalence_mix.csv")
+
+cmr_raw_pr_mix_sf    <- st_as_sf(cmr_raw_pr_mix, 
+                                 coords = c("longitude", "latitude"),
+                                 crs = 4326)
+
 
 ########################## Loading shape files #################################
 
@@ -489,6 +495,136 @@ GAB_df_1_sf$dist_to_water <- pmin(dist_riv_min, dist_lake_min)
 
 st_write(GAB_df_1_sf, "data/gab_data/GAB_df_1_sf.gpkg", append = FALSE)
 
+######################## Prediction grid for Gabon #############################
+
+# resolution in meters (5000 m = 5 km)
+res <- 5000  
+
+box_gab <- st_bbox(shp_gab %>% st_transform(3857)) %>% st_as_sfc()
+# Create grid covering bounding box of Gabon
+grid <- st_make_grid(
+  box_gab,
+  cellsize = res,
+  what = "centers"
+)
+
+grid <- st_sf(geometry = grid)
+
+# Keep only grid points inside Gabon
+grid <- st_intersection(grid, shp_gab%>% st_transform(3857))
+
+gab_vect <- vect(grid %>% st_transform(4326))
+
+ITN_intervention_2021 <- rast("data/ITN_2000/2025_GBD2024_Africa_ITN_2021.tif")
+
+elevation_grid <- rast("data/gab_data/elevation/gab_elv_msk.tif")
+grid_ndvi_stack<- rast(ndvi_files)
+# grid_ITN_usage_2021  <- project(ITN_intervention_2021,  st_crs(grid)$wkt)
+grid_pop  <- crop(gab_pop,  gab_vect)
+grid_pop  <- mask(gab_pop,  gab_vect)
+
+grid_land_cover_water <- crop(land_cover_water, gab_vect)
+grid_land_cover_water <- mask(grid_land_cover_water, gab_vect)
+
+grid_land_cover_built <- crop(land_cover_builts, gab_vect)
+grid_land_cover_built <- mask(grid_land_cover_built, gab_vect)
+
+grid_land_cover_cropland <- crop(land_cover_cropland, gab_vect)
+grid_land_cover_cropland <- mask(grid_land_cover_cropland, gab_vect)
+
+grid_land_cover_trees <- crop(land_cover_trees, gab_vect)
+grid_land_cover_trees <- mask(grid_land_cover_trees, gab_vect)
+
+grid_land_cover_wetland <- crop(land_cover_wetland, gab_vect)
+grid_land_cover_wetland <- mask(grid_land_cover_wetland, gab_vect)
+
+grid_rainfall_2021 <- crop(rainfall_2021, gab_vect)
+grid_rainfall_2021 <- mask(grid_rainfall_2021, gab_vect)
+
+grid_temperature_2021 <- crop(annual_temperature_climate , gab_vect)
+grid_temperature_2021 <- mask(grid_temperature_2021, gab_vect)
+
+
+grid_ITN_intervention_2021  <- crop(ITN_intervention_2021, gab_vect)
+grid_ITN_intervention_2021  <- mask(grid_ITN_intervention_2021, gab_vect)
+
+
+
+# grid_ITN_usage_2021_df <- terra::extract(grid_ITN_usage_2021,  grid)
+grid_pop_density_2020_df <- terra::extract(grid_pop,  gab_vect)
+grid_rainfall_2021_df    <- terra::extract(grid_rainfall_2021, gab_vect)
+grid_temperature_2021_df <- terra::extract(grid_temperature_2021, gab_vect)
+ndvi_vals_grid_monthly <- terra::extract(grid_ndvi_stack, gab_vect)
+ndvi_mean_grid <- apply(ndvi_vals_grid_monthly[,-1], 1, mean, na.rm = TRUE)
+elevation_grid_df <- terra::extract(elevation_grid, gab_vect)
+grid_land_cover_water_df <- terra::extract(grid_land_cover_water, gab_vect)
+grid_land_cover_built_df <- terra::extract(grid_land_cover_built, gab_vect)
+grid_land_cover_cropland_df <- terra::extract(grid_land_cover_cropland, gab_vect)
+grid_land_cover_trees_df <- terra::extract(grid_land_cover_trees, gab_vect)
+grid_land_cover_wetland_df <- terra::extract(grid_land_cover_wetland, gab_vect)
+grid_ITN_df                <- terra::extract(grid_ITN_intervention_2021, gab_vect)
+
+
+# distance to water
+
+# ------------------------------------------------------------------
+# Data (all in EPSG:4326)
+# ------------------------------------------------------------------
+wkt <- st_as_text(st_as_sfc(st_bbox(shp_gab)))
+
+rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
+                  wkt_filter = wkt)
+rivers <- rivers[rivers$ORD_STRA >= min_order, ] |> st_geometry()
+
+lakes <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+                 wkt_filter = wkt)
+lakes_geom <- st_make_valid(st_geometry(lakes))
+shores <- st_boundary(lakes_geom)             # turns each polygon into its outline (a line)
+shores <- shores[!st_is_empty(shores)]
+shores <- st_cast(shores, "MULTILINESTRING")  # makes all the outlines one geometry type
+# Grid centroids in lon/lat
+cent <- grid |> st_centroid() |> st_transform(4326)
+xyz_cent <- to_xyz(st_coordinates(cent)[, 1:2])
+
+# ------------------------------------------------------------------
+# Distances
+# ------------------------------------------------------------------
+xyz_riv  <- densify_xyz(rivers, spacing_m)
+d_river  <- nn_dist(xyz_riv, xyz_cent)
+rm(xyz_riv)
+
+xyz_lake <- densify_xyz(shores, spacing_m)
+d_lake   <- nn_dist(xyz_lake, xyz_cent)
+rm(xyz_lake)
+
+# Centroids inside a lake: distance is 0 (the shoreline would give > 0)
+in_lake <- lengths(st_intersects(cent, lakes_geom)) > 0
+d_lake[in_lake] <- 0
+
+
+grid$dist_to_water <- pmin(d_river, d_lake)
+
+
+grid <- grid %>% 
+  mutate(rainfall            = grid_rainfall_2021_df[,2],
+         temperature         = grid_temperature_2021_df[,2],
+         pop_density         = grid_pop_density_2020_df[,2],
+         elevation           = elevation_grid_df[,2],
+         vegetation_index    = ndvi_mean_grid,
+         landcover_cropland  = grid_land_cover_cropland_df[,2],
+         landcover_water     = grid_land_cover_water_df[,2],
+         landcover_wetland   = grid_land_cover_wetland_df[,2],
+         landcover_builts    = grid_land_cover_built_df[,2],
+         landcover_trees     = grid_land_cover_trees_df[,2],
+         ITN_2011            = grid_ITN_df[,2]) 
+
+numeric_cols <- names(grid)[sapply(grid, is.numeric)]
+
+for (col in numeric_cols) {
+  grid <- fill_by_nearest(grid, col)
+}
+
+st_write(grid, "data/gab_data/gab_map_grid.gpkg", append = FALSE)
 
 ############################## Cameroon case ###################################
 
@@ -785,6 +921,94 @@ st_write(cmr_pf_data_2011,
          "data/cmr_data/benchmarking_spatial_data_cmr_sf.gpkg", append = FALSE)
 
 
+################# Cameroon benchmark mix #######################################
+
+
+cmr_pop_density_2011_df <- terra::extract(cmr_pop,  cmr_raw_pr_mix_sf)
+cmr_rainfall_2011_df    <- terra::extract(cmr_rainfall_2011, cmr_raw_pr_mix_sf)
+cmr_temperature_2011_df <- terra::extract(cmr_temperature_2011, cmr_raw_pr_mix_sf)
+ndvi_vals_cmr_monthly <- terra::extract(cmr_ndvi_stack, cmr_raw_pr_mix_sf)
+ndvi_mean_cmr <- apply(ndvi_vals_cmr_monthly[,-1], 1, mean, na.rm = TRUE)
+elevation_cmr_df <- terra::extract(elevation_cmr, cmr_raw_pr_mix_sf)
+cmr_land_cover_water_df <- terra::extract(cmr_land_cover_water, cmr_raw_pr_mix_sf)
+cmr_land_cover_built_df <- terra::extract(cmr_land_cover_built, cmr_raw_pr_mix_sf)
+cmr_land_cover_cropland_df <- terra::extract(cmr_land_cover_cropland, cmr_raw_pr_mix_sf)
+cmr_land_cover_trees_df <- terra::extract(cmr_land_cover_trees, cmr_raw_pr_mix_sf)
+cmr_land_cover_wetland_df <- terra::extract(cmr_land_cover_wetland, cmr_raw_pr_mix_sf)
+cmr_ITN_2011_df   <- terra::extract(cmr_ITN_2011, cmr_raw_pr_mix_sf)
+cmr_IRS_2011_df   <- terra::extract(cmr_IRS_2011, cmr_raw_pr_mix_sf)
+cmr_effective_treat_2011_df   <- terra::extract(cmr_effective_treat_2011, cmr_raw_pr_mix_sf)
+
+
+# distance to water
+
+# ------------------------------------------------------------------
+# Data (all in EPSG:4326)
+# ------------------------------------------------------------------
+wkt <- st_as_text(st_as_sfc(st_bbox(shp_cmr)))
+
+rivers <- st_read("data/HydroRIVERS_v10_af_shp/HydroRIVERS_v10_af.shp",
+                  wkt_filter = wkt)
+rivers <- rivers[rivers$ORD_STRA >= min_order, ] |> st_geometry()
+
+lakes <- st_read("data/HydroLAKES_polys_v10_shp/HydroLAKES_polys_v10.shp",
+                 wkt_filter = wkt)
+lakes_geom <- st_make_valid(st_geometry(lakes))
+shores <- st_boundary(lakes_geom)             # turns each polygon into its outline (a line)
+shores <- shores[!st_is_empty(shores)]
+shores <- st_cast(shores, "MULTILINESTRING")  # makes all the outlines one geometry type
+# Grid centroids in lon/lat
+cent <- cmr_raw_pr_mix_sf |> st_centroid() |> st_transform(4326)
+xyz_cent <- to_xyz(st_coordinates(cent)[, 1:2])
+
+# ------------------------------------------------------------------
+# Distances
+# ------------------------------------------------------------------
+xyz_riv  <- densify_xyz(rivers, spacing_m)
+d_river  <- nn_dist(xyz_riv, xyz_cent)
+rm(xyz_riv)
+
+xyz_lake <- densify_xyz(shores, spacing_m)
+d_lake   <- nn_dist(xyz_lake, xyz_cent)
+rm(xyz_lake)
+
+# Centroids inside a lake: distance is 0 (the shoreline would give > 0)
+in_lake <- lengths(st_intersects(cent, lakes_geom)) > 0
+d_lake[in_lake] <- 0
+
+
+cmr_raw_pr_mix_sf$dist_to_water <- pmin(d_river, d_lake)
+
+
+
+
+cmr_raw_pr_mix_sf_final <- cmr_raw_pr_mix_sf %>% 
+  dplyr::select(site_id, lower_age, upper_age, examined, positive, pr, species, dist_to_water) %>% 
+  mutate(pop_density = cmr_pop_density_2011_df[,2],
+         rainfall = cmr_rainfall_2011_df[,2],
+         temperature = cmr_temperature_2011_df[,2],
+         elevation = elevation_cmr_df[,2],
+         vegetation_index = ndvi_mean_cmr,
+         landcover_water = cmr_land_cover_water_df[,2],
+         landcover_trees = cmr_land_cover_trees_df[,2],
+         landcover_builts = cmr_land_cover_built_df[,2],
+         landcover_cropland = cmr_land_cover_cropland_df[,2],
+         landcover_wetland = cmr_land_cover_wetland_df[,2],
+         ITN_2011         = cmr_ITN_2011_df[,2],
+         effective_treat  = cmr_effective_treat_2011_df[,2]) 
+
+
+numeric_cols <- names(cmr_raw_pr_mix_sf_final)[sapply(cmr_raw_pr_mix_sf_final, is.numeric)]
+
+for (col in numeric_cols) {
+  cmr_raw_pr_mix_sf_final <- fill_by_nearest(cmr_raw_pr_mix_sf_final, col)
+}
+
+st_write(cmr_raw_pr_mix_sf_final, 
+         "data/cmr_data/benchmarking_spatial_data_cmr_sf_mix.gpkg", append = FALSE)
+
+
+
 ################ Prediction grid for benchmark exercise Cameroon ###############
 
 # resolution in meters (5000 m = 5 km)
@@ -1078,7 +1302,6 @@ for (col in numeric_cols) {
 
 st_write(africa_pf_PR_with_coord_join_2021_sf, 
          "data/Africa_data/africa_pf_PR_with_coord_join_2021_sf.gpkg", append = FALSE)
-
 
 ################################################################################
 #                 case of grid cells at country level                          #

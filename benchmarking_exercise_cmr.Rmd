@@ -91,10 +91,12 @@ fill_by_nearest <- function(sf_obj, colname) {
 
 ```{r}
 GPS_cmr_2011 <- st_read("data/cmr_data/GPS location 2011/CMGE61FL.shp")
+GPS_cmr_2018 <- st_read("data/cmr_data/GPS location 2018/CMGE71FL/CMGE71FL.shp")
 GPS_cmr_2022 <- st_read("data/cmr_data/GPS location 2022/CMGE81FL.shp")
 
 
 shp_cmr <- read_sf("data/cmr_data/CMR_shape_file/cameroun_districts_2024.shp")
+shp_gab <- read_sf("data/gab_data/gab_shape/gadm41_GAB_2.shp")
 
 cmr_vect <- vect(shp_cmr)
 
@@ -103,6 +105,15 @@ GPS_cmr_coords_2011 <- GPS_cmr_2011 %>%
   mutate(
     longitude = st_coordinates(GPS_cmr_2011)[, 1],
     latitude  = st_coordinates(GPS_cmr_2011)[, 2]
+  ) %>%
+  dplyr::select(DHSCLUST, longitude, latitude) %>%
+  filter(latitude != 0 & longitude != 0)
+
+GPS_cmr_coords_2018 <- GPS_cmr_2018 %>%
+  st_drop_geometry() %>%
+  mutate(
+    longitude = st_coordinates(GPS_cmr_2018)[, 1],
+    latitude  = st_coordinates(GPS_cmr_2018)[, 2]
   ) %>%
   dplyr::select(DHSCLUST, longitude, latitude) %>%
   filter(latitude != 0 & longitude != 0)
@@ -134,6 +145,8 @@ map_without_coords_cmr <- raw_prevalence_cmr_without_coord %>%
 map_recovered_cmr_2011 <- map_without_coords_cmr %>%
   left_join(GPS_cmr_coords_2011, by = c("cluster_num" = "DHSCLUST"))
 
+map_recovered_cmr_2018 <- map_without_coords_cmr %>%
+  left_join(GPS_cmr_coords_2018, by = c("cluster_num" = "DHSCLUST"))
 
 map_recovered_cmr_2022 <- map_without_coords_cmr %>%
   left_join(GPS_cmr_coords_2022, by = c("cluster_num" = "DHSCLUST"))
@@ -155,6 +168,19 @@ map_full_cmr_2011 <- map_full_cmr_2011 %>%
 
 write_csv(map_full_cmr_2011, file = "data/cmr_data/cmr_MAP_full_raw_prevalence_2011.csv")
 
+map_full_cmr_2018 <- bind_rows(
+  raw_prevalence_cmr_with_coord %>% filter(!is.na(longitude) & !is.na(latitude)),
+  map_recovered_cmr_2018 %>% filter(!is.na(longitude) & !is.na(latitude))
+)
+
+map_full_cmr_2018 <- map_full_cmr_2018 %>%
+  filter(year_start == 2018) %>%
+  filter(!is.na(longitude) & !is.na(latitude)) %>% 
+  filter(species == "P. falciparum")
+
+write_csv(map_full_cmr_2018, file = "data/cmr_data/cmr_MAP_full_raw_prevalence_2018.csv")
+
+
 map_full_cmr_2022 <- bind_rows(
   raw_prevalence_cmr_with_coord %>% filter(!is.na(longitude) & !is.na(latitude)),
   map_recovered_cmr_2022 %>% filter(!is.na(longitude) & !is.na(latitude))
@@ -168,21 +194,35 @@ map_full_cmr_2022 <- map_full_cmr_2022 %>%
 
 write_csv(map_full_cmr_2022, file = "data/cmr_data/cmr_MAP_full_raw_prevalence_2022.csv")
 
+
+map_full_cmr_2011_1 <- map_full_cmr_2011 %>% 
+  bind_rows(map_full_cmr_2018) %>% 
+  bind_rows(map_full_cmr_2022) %>% 
+  bind_rows(raw_prevalence_cmr_with_coord %>% filter(!(year_start %in% c(2011, 2018, 2022)) & !(year_end %in% c(2011, 2018, 2022)))) %>% 
+  filter(species == "P. falciparum")
+
+
+write_csv(map_full_cmr_2011_1, file = "data/cmr_data/cmr_MAP_full_raw_prevalence_mix.csv")
+
+
 ```
 
 
 # Filter for the year 2011 for our analysis
 
 ```{r}
-map_2011_cmr <- st_read("data/cmr_data/cmr_MAP_full_raw_prevalence_2011.csv")
+map_2011_cmr <- read.csv("data/cmr_data/cmr_MAP_full_raw_prevalence_2011.csv")
+
+map_full_cmr_2011_1 <- read.csv("data/cmr_data/cmr_MAP_full_raw_prevalence_mix.csv")
 
 map_2011_cmr_sf <- st_as_sf(map_2011_cmr, coords = c("longitude", "latitude"), crs = 4326)
 
+map_full_cmr_2011_2 <- st_as_sf(map_full_cmr_2011_1, 
+                                coords = c("longitude", "latitude"),
+                                crs = 4326)
 
 breaks_pr <- c(0, 0.05, 0.10, 0.20, 0.40, 0.60, 1)
-labels_pr <- c(
-  "0–5%", "5–10%", "10–20%", "20–40%", "40–60%", ">60%"
-)
+labels_pr <- c("0–5%", "5–10%", "10–20%", "20–40%", "40–60%", ">60%")
 
 colors_pr <- c(
   "#ffffcc",  # pale yellow (very low)
@@ -199,9 +239,16 @@ map_2011_cmr_sf$pr_class <- cut(
   map_2011_cmr_sf$pr,
   breaks = breaks_pr,
   labels = labels_pr,
-  include.lowest = TRUE
-)
+  include.lowest = TRUE)
 
+
+map_full_cmr_2011_2$pr <- as.numeric(map_full_cmr_2011_2$pr)
+
+map_full_cmr_2011_2$pr_class <- cut(
+  map_full_cmr_2011_2$pr,
+  breaks = breaks_pr,
+  labels = labels_pr,
+  include.lowest = TRUE)
 
 
 map <- mapview(shp_cmr,
@@ -209,10 +256,10 @@ map <- mapview(shp_cmr,
         alpha.regions = 0.2,
         color = "black") +
   mapview(map_2011_cmr_sf,
-          zcol = "pr_class",             # categorical variable
+          zcol = "pr_class",                         # categorical variable
           cex = "examined",
-          col.regions = colors_pr,       # one color per class
-          layer.name = "P. malariae prevalence",
+          col.regions = colors_pr,                   # one color per class
+          layer.name = "P. falciparum prevalence",
           legend = TRUE)
 
 
@@ -233,6 +280,7 @@ plot(st_geometry(map_2011_cmr_sf), pch = 16, cex = 0.5, main = "2011 Survey Poin
 cmr_pf_data_2011 <- st_read("data/cmr_data/benchmarking_spatial_data_cmr_sf.gpkg")
 grid <- st_read("data/cmr_data/cmr_map_grid.gpkg")
 shp_cmr <- read_sf("data/cmr_data/CMR_shape_file/cameroun_districts_2024.shp")
+cmr_pf_data_2011_mix <- st_read("data/cmr_data/benchmarking_spatial_data_cmr_sf_mix.gpkg")
 ```
 
 
@@ -266,8 +314,8 @@ fit <- lm(
 vif(fit)
 
 fit1 <- lm(
-  positive / examined ~ rainfall + temperature + pop_density + dist_to_water + landcover_water + landcover_trees +
-  landcover_builts + landcover_cropland + landcover_wetland + ITN_2011 + effective_treat + vegetation_index,
+  positive / examined ~ rainfall + temperature + pop_density + dist_to_water + landcover_water +
+  landcover_builts + landcover_cropland + landcover_wetland + ITN_2011 + effective_treat + landcover_trees,
   data = cmr_pf_data_2011
 )
 
@@ -307,15 +355,15 @@ plot(vgm_emp, vgm_mod)
 # Mesh visualization
 ```{r}
 
-pts      <- st_transform(cmr_pf_data_2011, 3857)
+pts      <- st_transform(cmr_pf_data_2011_mix, 3857)
 shp_cmr_m  <- st_transform(shp_cmr, 3857)
 
 
 mesh_1 <- fmesher::fm_mesh_2d_inla(
   loc      = st_coordinates(pts),
   boundary = fm_as_segm(shp_cmr_m),
-  max.edge = c(25e3, 100e3),                     # 50 km near data, 200 km outer
-  cutoff   = 10e3,                               # min distance between points (15 km)
+  max.edge = c(50e3, 100e3),                     # 50 km near data, 200 km outer
+  cutoff   = 25e3,                               # min distance between points (15 km)
   offset   = c(50e3, 150e3)                      # extend mesh 50–150 km beyond country
 )
 
@@ -385,58 +433,60 @@ for (var in vars_to_scale) {
   pts[[var]] <- (pts[[var]] - mean_val) / sd_val
 }
 
+A_est <- inla.spde.make.A(mesh_2, loc = st_coordinates(pts))
 
 
-stk_est <- inla.stack(
-  data = list(
-    y       = pts$positive,
-    Ntrials = pts$examined
-  ),
-  A = list(A_est, 1),
-  effects = list(
-    spatial = 1:spde$n.spde,
-    data.frame(
-    intercept        = 1,
-    rainfall         = pts$rainfall,
-    temperature      = pts$temperature,
-    pop_density      = pts$pop_density,
-    dist_to_water    = pts$dist_to_water,
-    lc_water         = pts$landcover_water,
-    lc_trees         = pts$landcover_trees,
-    lc_built         = pts$landcover_builts,
-    lc_wetland       = pts$landcover_wetland,
-    lc_cropland      = pts$landcover_cropland
-    )
-  ),
-  tag = "est"
-)
 
-
-stk_est_intervention <- inla.stack(
-  data = list(
-    y       = pts$positive,
-    Ntrials = pts$examined
-  ),
-  A = list(A_est, 1),
-  effects = list(
-    spatial = 1:spde$n.spde,
-    data.frame(
-    intercept        = 1,
-    rainfall         = pts$rainfall,
-    temperature      = pts$temperature,
-    pop_density      = pts$pop_density,
-    dist_to_water    = pts$dist_to_water,
-    lc_water         = pts$landcover_water,
-    lc_trees         = pts$landcover_trees,
-    lc_built         = pts$landcover_builts,
-    lc_wetland       = pts$landcover_wetland,
-    lc_cropland      = pts$landcover_cropland,
-    ITN              = pts$ITN_2011,
-    effective_treat  = pts$effective_treat
-    )
-  ),
-  tag = "est"
-)
+# stk_est <- inla.stack(
+#   data = list(
+#     y       = pts$positive,
+#     Ntrials = pts$examined
+#   ),
+#   A = list(A_est, 1),
+#   effects = list(
+#     spatial = 1:spde$n.spde,
+#     data.frame(
+#     intercept        = 1,
+#     rainfall         = pts$rainfall,
+#     temperature      = pts$temperature,
+#     pop_density      = pts$pop_density,
+#     dist_to_water    = pts$dist_to_water,
+#     lc_water         = pts$landcover_water,
+#     lc_trees         = pts$landcover_trees,
+#     lc_built         = pts$landcover_builts,
+#     lc_wetland       = pts$landcover_wetland,
+#     lc_cropland      = pts$landcover_cropland
+#     )
+#   ),
+#   tag = "est"
+# )
+# 
+# 
+# stk_est_intervention <- inla.stack(
+#   data = list(
+#     y       = pts$positive,
+#     Ntrials = pts$examined
+#   ),
+#   A = list(A_est, 1),
+#   effects = list(
+#     spatial = 1:spde$n.spde,
+#     data.frame(
+#     intercept        = 1,
+#     rainfall         = pts$rainfall,
+#     temperature      = pts$temperature,
+#     pop_density      = pts$pop_density,
+#     dist_to_water    = pts$dist_to_water,
+#     lc_water         = pts$landcover_water,
+#     lc_trees         = pts$landcover_trees,
+#     lc_built         = pts$landcover_builts,
+#     lc_wetland       = pts$landcover_wetland,
+#     lc_cropland      = pts$landcover_cropland,
+#     ITN              = pts$ITN_2011,
+#     effective_treat  = pts$effective_treat
+#     )
+#   ),
+#   tag = "est"
+# )
 
 ```
 
@@ -817,30 +867,54 @@ for (var in vars_to_scale) {
   grid[[var]] <- (grid[[var]] - mean_val) / sd_val
 }
 
-
-
-#Build the prediction stack
-
-stk_pred <- inla.stack(
-  data = list(y = NA, Ntrials = NA),
-  A    = list(A_pred, 1),
+stk_est_intervention <- inla.stack(
+  data = list(
+    y       = pts$positive,
+    Ntrials = pts$examined
+  ),
+  A = list(A_est, 1),
   effects = list(
     spatial = 1:spde$n.spde,
     data.frame(
-      intercept        = 1,
-      rainfall         = grid$rainfall,
-      temperature      = grid$temperature,
-      pop_density      = grid$pop_density,
-      dist_to_water    = grid$dist_to_water,
-      lc_cropland      = grid$landcover_cropland,
-      lc_water         = grid$landcover_water,
-      lc_wetland       = grid$landcover_wetland,
-      lc_built         = grid$landcover_builts,
-      lc_trees         = grid$landcover_trees
+    intercept        = 1,
+    rainfall         = pts$rainfall,
+    temperature      = pts$temperature,
+    pop_density      = pts$pop_density,
+    dist_to_water    = pts$dist_to_water,
+    lc_water         = pts$landcover_water,
+    lc_trees         = pts$landcover_trees,
+    lc_built         = pts$landcover_builts,
+    lc_wetland       = pts$landcover_wetland,
+    lc_cropland      = pts$landcover_cropland,
+    ITN              = pts$ITN_2011,
+    effective_treat  = pts$effective_treat
     )
   ),
-  tag = "pred"
+  tag = "est"
 )
+
+#Build the prediction stack
+
+# stk_pred <- inla.stack(
+#   data = list(y = NA, Ntrials = NA),
+#   A    = list(A_pred, 1),
+#   effects = list(
+#     spatial = 1:spde$n.spde,
+#     data.frame(
+#       intercept        = 1,
+#       rainfall         = grid$rainfall,
+#       temperature      = grid$temperature,
+#       pop_density      = grid$pop_density,
+#       dist_to_water    = grid$dist_to_water,
+#       lc_cropland      = grid$landcover_cropland,
+#       lc_water         = grid$landcover_water,
+#       lc_wetland       = grid$landcover_wetland,
+#       lc_built         = grid$landcover_builts,
+#       lc_trees         = grid$landcover_trees
+#     )
+#   ),
+#   tag = "pred"
+# )
 
 
 stk_pred_intervention <- inla.stack(
@@ -868,28 +942,28 @@ stk_pred_intervention <- inla.stack(
 
 
 # Combine estimation + prediction stacks
-stk_full <- inla.stack(stk_est, stk_pred)
+# stk_full <- inla.stack(stk_est, stk_pred)
 
-stk_full_intervention <- inla.stack(stk_est_intervention, stk_pred)
+stk_full_intervention <- inla.stack(stk_est_intervention, stk_pred_intervention)
 
 
 # Fit the model again with the full stack
-res_pred <- inla(
-  formula,
-  family = "betabinomial",
-  Ntrials = Ntrials,
-  data = inla.stack.data(stk_full),
-  control.predictor = list(
-    A = inla.stack.A(stk_full),
-    compute = TRUE,
-    link = 1
-  ),
-  control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE)
-)
+# res_pred <- inla(
+#   formula_intervention,
+#   family = "binomial",
+#   Ntrials = Ntrials,
+#   data = inla.stack.data(stk_full),
+#   control.predictor = list(
+#     A = inla.stack.A(stk_full),
+#     compute = TRUE,
+#     link = 1
+#   ),
+#   control.compute = list(dic = TRUE, waic = TRUE, cpo = TRUE, config = TRUE)
+# )
 
 
 res_pred_intervention <- inla(
-  formula,
+  formula_intervention,
   family = "betabinomial",
   Ntrials = Ntrials,
   data = inla.stack.data(stk_full_intervention),
@@ -940,14 +1014,14 @@ cmr_prev_1 <- ggplot(shp_cmr) +
                   mapping = aes(fill = prev_mean))+
   geom_sf(fill = NA)+
   scale_fill_stepsn(
-    colours = rev(brewer.pal(5, "RdYlGn")),
+    colours = (brewer.pal(5, "YlOrRd")),
     breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
     na.value = "transparent",
     name = "annual prevalence of P. f")+
   theme_void()+
   labs(title = "annual prevalence of P. f in 2011 with intervention")
 
-ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_test_pf_all_age_with_intervention.pdf",
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_test_pf_all_age_with_intervention_mix.png",
        plot = cmr_prev_1, width = 6, height = 4, dpi = 300)
 
 pfpr_2011_cmr <- rast("data/cmr_data/MAP_modelled_prevalence/202608_Global_Pf_Parasite_Rate_CMR_2011.tiff") 
@@ -959,14 +1033,14 @@ cmr_prev_2 <- ggplot(shp_cmr) +
                   mapping = aes(fill = Prev_mean))+
   geom_sf(fill = NA)+
   scale_fill_stepsn(
-    colours = rev(brewer.pal(5, "RdYlGn")),
+    colours = (brewer.pal(5, "YlOrRd")),
     breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
     na.value = "transparent",
     name = "annual prevalence of P. f (2-10years)")+
   theme_void()+
   labs(title = "annual prevalence of P. f (2-10years) in 2011")
 
-ggsave("Outputs/cmr_output/MAP_pr_modeled/2011_cmr_pr_map_pf_2_10.png",
+ggsave("Outputs/cmr_output/MAP_pr_modeled/2011_cmr_pr_map_pf_2_10_mix.pdf",
        plot = cmr_prev_2, width = 6, height = 4, dpi = 300)
 
 
@@ -1042,7 +1116,7 @@ labels_prev <- c(
   "50–60%", "60–80%", "80–100%"
 )
 
-colors_prev <- rev(brewer.pal(7, "RdYlGn"))
+colors_prev <- (brewer.pal(7, "YlOrRd"))
 
 
 
@@ -1065,7 +1139,7 @@ cmr_prev_3 <- ggplot(prev_dat_cmr_2011_sf) +
     legend.title = element_text(size = 15)
   )
 
-ggsave("Outputs/cmr_output/MAP_pr_modeled/2011_cmr_pr_map_pf_all_age_admin2.png",
+ggsave("Outputs/cmr_output/MAP_pr_modeled/2011_cmr_pr_map_pf_all_age_admin2_mix.pdf",
        plot = cmr_prev_3, width = 6, height = 4, dpi = 300)
 
 
@@ -1090,7 +1164,7 @@ cmr_prev_4 <- ggplot(prev_dat_cmr_2011_sf_test) +
   )
 
 
-ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_pf_all_age_admin2_with_intervention.png",
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_pf_all_age_admin2_with_intervention_mix.png",
        plot = cmr_prev_4, width = 6, height = 4, dpi = 300)
 
 prev_dat_cmr_2011_sf_test$PfPR_map <- prev_dat_cmr_2011_sf$PR_all_age
@@ -1100,13 +1174,13 @@ prev_dat_cmr_2011_sf_test$PfPR_map_l <- prev_dat_cmr_2011_sf$PR_all_age_L
 prev_dat_cmr_2011_sf_test <- prev_dat_cmr_2011_sf_test %>% 
   mutate(diff_PfPR = PfPR_mean - PfPR_map)
 
-breaks_prev_diff <- c(-0.15, -0.05, 0.05, 0.1, 0.15, 0.2, 0.25, 30)
+breaks_prev_diff <- c(-0.30, -0.05, 0.05, 0.1, 0.15, 0.2, 0.25, 30)
 labels_prev_diff <- c(
-  "-0.15%<-0.05%", "-0.05%<0.05%", "0.05%<0.10%", "0.10%<0.15%",
+  "-0.30%<-0.05%", "-0.05%<0.05%", "0.05%<0.10%", "0.10%<0.15%",
   "0.15%<0.20%", "0.20%<0.25%", "0.25<0.30%"
 )
 
-colors_prev_diff <- rev(brewer.pal(7, "RdYlGn"))
+colors_prev_diff <- (brewer.pal(7, "YlOrRd"))
 
 cmr_prev_5 <- ggplot(prev_dat_cmr_2011_sf_test) +
   geom_sf(aes(fill = cut(
@@ -1144,10 +1218,10 @@ map1 <- mapview(
   
 
 mapshot(map1, 
-        file = "Outputs/cmr_output/Pf_pr_estimated/difference_prev_MAP_vsour_model.html",
+        file = "Outputs/cmr_output/Pf_pr_estimated/difference_prev_MAP_vsour_model_mix.html",
         selfcontained = T)
 
-ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_diff_pf_all_age_admin2_with_intervention.png",
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_diff_pf_all_age_admin2_with_intervention_mix.pdf",
        plot = cmr_prev_5, width = 6, height = 4, dpi = 300)
 
 ```
