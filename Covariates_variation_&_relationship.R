@@ -201,3 +201,29 @@ ggplot(plot_data %>% filter((Covariate %in% bounded)),
       hjust = 1
     )
   )
+
+selected_covariate_final <- c("annual_rainfall_2021", "annual_temperature_2021",
+                              "dist_to_water", "lc_built", "PR_Pm_tot")
+
+spatial_data_gab_1 <- spatial_data_gab[, selected_covariate_final]
+
+plot_data <- spatial_data_gab_1 %>% 
+  st_drop_geometry()%>%
+  pivot_longer(
+    cols = 1:4,
+    names_to = "Covariate",
+    values_to = "Value")
+
+
+ggplot(plot_data,
+       aes(x = PR_Pm_tot,
+           y = Value)) +
+  geom_point(size = 2.5, alpha = 0.7) +
+  facet_wrap(~Covariate,
+             scales = "free_x",
+             ncol = 3) +
+  geom_smooth(
+    method = "loess",
+    se = FALSE,
+    linewidth = 1.1)+
+  theme_classic()
