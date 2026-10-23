@@ -226,8 +226,8 @@ effects_fixed_complete <- data.frame(
 
 stk_est <- inla.stack(
   data = list(
-    y       = spatial_data_gab_sp$Number_of_infected_tot_pm,
-    Ntrials = spatial_data_gab_sp$Number_of_participant_tot),
+    y       = spatial_data_gab$Number_of_infected_tot_pm,
+    Ntrials = spatial_data_gab$Number_of_participant_tot),
   A = list(A_est, 1),
   effects = list(
     spatial = 1:spde_Gabon$n.spde,
@@ -242,11 +242,16 @@ formular_complete <-  y ~ -1 + annual_rainfall_2021 + pop_density_2020 + dist_to
 
 ```{r}
 
-gabon_union_sp <- as(gabon_union, "Spatial")
 
 # coords_gabon <- coordinates(spatial_data_gab_sp)
 spatial_data_gab$lon <- coords_gabon[,1]
 spatial_data_gab$lat <- coords_gabon[,2]
+
+spatial_data_gab <- spatial_data_gab %>% 
+  mutate(annual_rainfall_2021_id  = inla.group(annual_rainfall_2021, n = 21),
+         pop_density_2020_id      = inla.group(pop_density_2020, n = 21),
+         dist_to_water_id         = inla.group(dist_to_water, n = 21),
+         lc_built_id              = inla.group(lc_built, n = 21))
 #-----------------------------------------------------------
 # BUILD ONE GLOBAL MESH
 #-----------------------------------------------------------
@@ -379,6 +384,7 @@ run_random_cv <- function(data, covariates, mesh, spde, s.index){
     #-----------------------------------------------------
 
     fixed_terms <- paste(covariates, collapse = " + ")
+    ralation_term <- paste("f(", covariates, "_id, model = \"rw2\")", sep = "", collapse =  " + ")
 
     formula <- as.formula(paste0("y ~ -1 + intercept + ", fixed_terms,
                                  " + f(spatial, model = spde)"))
@@ -682,11 +688,11 @@ ggplot(gab_pr_pm_shp) +
     colours = rev(brewer.pal(5, "RdYlGn")),
     breaks = used_breaks,
     limits = c(0, 1),
-    name = "Prevalence of FFV",
+    name = "Prevalence of P. malariae",
     na.value = "transparent"
   ) +
   theme_void() +
-  labs(title = "Annual prevalence of FFV")
+  labs(title = "Annual prevalence of P. malariae")
 
 ```
 
