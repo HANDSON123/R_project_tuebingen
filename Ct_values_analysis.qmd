@@ -234,7 +234,6 @@ model2 <- lm(Ct_value_pf ~ Age_group + Season, data = country_summary %>% filter
 summary(model2)
 ```
 
-
 ```{r}
 #| label: Demographic and risk factor analysis
 

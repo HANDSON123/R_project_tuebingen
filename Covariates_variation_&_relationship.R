@@ -37,69 +37,69 @@ covariates <- c(
 
 # Compute summary statistics
 
-compute_cov_stats <- function(data, country_col, covariates){
-  
-  # Remove geometry
-  data <- st_drop_geometry(data)
-  
-  # Loop over countries
-  results <- lapply(unique(data[[country_col]]), function(ctry){
-    
-    dat_country <- data[data[[country_col]] == ctry, ]
-    
-    means <- sapply(covariates,
-                    function(v) mean(dat_country[[v]], na.rm = TRUE))
-    
-    vars <- sapply(covariates,
-                   function(v) var(dat_country[[v]], na.rm = TRUE))
-    
-    sds <- sapply(covariates,
-                  function(v) sd(dat_country[[v]], na.rm = TRUE))
-    
-    ranges <- sapply(covariates, function(v){
-      x <- dat_country[[v]]
-      diff(range(x, na.rm = TRUE))
-    })
-    
-    std_sd <- sds / (ranges)
-    
-    data.frame(
-      Country = ctry,
-      Covariate = covariates,
-      Mean = means,
-      Standard_sd = std_sd
-    )
-  })
-  
-  results <- bind_rows(results)
-  
-  results
-}
-
-# Run
-cov_summary_all <- compute_cov_stats(
-  data = sampled_data_join_sf,
-  country_col = "country",
-  covariates = covariates
-)
-
-
-cv_table <- cov_summary_all %>%
-  select(Country, Covariate, StandardizedVariance) %>%
-  pivot_wider(
-    names_from = Covariate,
-    values_from = StandardizedVariance)
-
-
-top5_covariates <- cov_summary_all %>%
-  group_by(Country) %>%
-  slice_max(StandardizedVariance, n = 5)
-
-cv_table <- top5_covariates %>%
-  select(Country, Covariate, StandardizedVariance) %>%
-  pivot_wider(
-    names_from = Covariate,
-    values_from = StandardizedVariance)
+# compute_cov_stats <- function(data, country_col, covariates){
+#   
+#   # Remove geometry
+#   data <- st_drop_geometry(data)
+#   
+#   # Loop over countries
+#   results <- lapply(unique(data[[country_col]]), function(ctry){
+#     
+#     dat_country <- data[data[[country_col]] == ctry, ]
+#     
+#     means <- sapply(covariates,
+#                     function(v) mean(dat_country[[v]], na.rm = TRUE))
+#     
+#     vars <- sapply(covariates,
+#                    function(v) var(dat_country[[v]], na.rm = TRUE))
+#     
+#     sds <- sapply(covariates,
+#                   function(v) sd(dat_country[[v]], na.rm = TRUE))
+#     
+#     ranges <- sapply(covariates, function(v){
+#       x <- dat_country[[v]]
+#       diff(range(x, na.rm = TRUE))
+#     })
+#     
+#     std_sd <- sds / (ranges)
+#     
+#     data.frame(
+#       Country = ctry,
+#       Covariate = covariates,
+#       Mean = means,
+#       Standard_sd = std_sd
+#     )
+#   })
+#   
+#   results <- bind_rows(results)
+#   
+#   results
+# }
+# 
+# # Run
+# cov_summary_all <- compute_cov_stats(
+#   data = sampled_data_join_sf,
+#   country_col = "country",
+#   covariates = covariates
+# )
+# 
+# 
+# cv_table <- cov_summary_all %>%
+#   select(Country, Covariate, StandardizedVariance) %>%
+#   pivot_wider(
+#     names_from = Covariate,
+#     values_from = StandardizedVariance)
+# 
+# 
+# top5_covariates <- cov_summary_all %>%
+#   group_by(Country) %>%
+#   slice_max(StandardizedVariance, n = 5)
+# 
+# cv_table <- top5_covariates %>%
+#   select(Country, Covariate, StandardizedVariance) %>%
+#   pivot_wider(
+#     names_from = Covariate,
+#     values_from = StandardizedVariance)
 
 
 plot_data <- spatial_data_gab %>%
@@ -154,9 +154,7 @@ scaled_data1 <- spatial_data_gab %>%
   mutate(annual_rainfall_2021    = as.numeric(scale(annual_rainfall_2021)),
          annual_temperature_2021 = as.numeric(scale(annual_temperature_2021)),
          pop_density_2020        = as.numeric(scale(pop_density_2020)),
-         dist_to_water           = as.numeric(scale(dist_to_water)),
-         elevation               = as.numeric(scale(elevation)),
-         vegetation_index        = as.numeric(scale(vegetation_index)))
+         dist_to_water           = as.numeric(scale(dist_to_water)))
 
 plot_data <- scaled_data1 %>%
   pivot_longer(
@@ -172,6 +170,7 @@ ggplot(plot_data %>% filter(Covariate %in% unbounded),
        aes(x = Covariate,
            y = Value)) +
   geom_boxplot(fill = "lightblue") +
+  geom_jitter(width = 0.2, alpha = 0.5, color = "darkslategrey")+
   theme_bw() +
   theme(
     panel.grid = element_blank(),
@@ -193,6 +192,7 @@ ggplot(plot_data %>% filter((Covariate %in% bounded)),
        aes(x = Covariate,
            y = Value)) +
   geom_boxplot(fill = "lightblue") +
+  geom_jitter(width = 0.2, alpha = 0.5, color = "darkslategrey")+
   theme_bw() +
   theme(
     panel.grid = element_blank(),
@@ -203,7 +203,7 @@ ggplot(plot_data %>% filter((Covariate %in% bounded)),
   )
 
 selected_covariate_final <- c("annual_rainfall_2021", "annual_temperature_2021",
-                              "dist_to_water", "lc_built", "PR_Pm_tot")
+                              "vegetation_index", "dist_to_water", "lc_built", "PR_Pm_tot")
 
 spatial_data_gab_1 <- spatial_data_gab[, selected_covariate_final]
 

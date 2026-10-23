@@ -130,7 +130,7 @@ mesh_gabon <- inla.mesh.2d(
   loc      = coords_gabon,
   boundary = inla.sp2segment(gabon_union_sp),
   max.edge = c(25e3, 200e3),   
-  cutoff   = 70e3,
+  cutoff   = 40e3,
   offset   = c(100e3, 200e3))
 
 # Extract triangle vertex indices
@@ -248,10 +248,13 @@ spatial_data_gab$lon <- coords_gabon[,1]
 spatial_data_gab$lat <- coords_gabon[,2]
 
 spatial_data_gab <- spatial_data_gab %>% 
-  mutate(annual_rainfall_2021_id  = inla.group(annual_rainfall_2021, n = 21),
-         pop_density_2020_id      = inla.group(pop_density_2020, n = 21),
-         dist_to_water_id         = inla.group(dist_to_water, n = 21),
-         lc_built_id              = inla.group(lc_built, n = 21))
+  mutate(annual_rainfall_2021_id    = inla.group(annual_rainfall_2021, n = 21),
+         annual_temperature_2021_id = inla.group(annual_temperature_2021, n = 21),
+         vegetation_index_id        = inla.group(vegetation_index, n = 21),
+         pop_density_2020_id        = inla.group(pop_density_2020, n = 21),
+         dist_to_water_id           = inla.group(dist_to_water, n = 21),
+         lc_built_id                = inla.group(lc_built, n = 21),
+         lc_trees_id                = inla.group(lc_trees, n = 21))
 #-----------------------------------------------------------
 # BUILD ONE GLOBAL MESH
 #-----------------------------------------------------------
@@ -260,7 +263,7 @@ mesh <- inla.mesh.2d(
   loc      = coords_gabon,
   boundary = inla.sp2segment(gabon_union),
   max.edge = c(25e3, 200e3),   
-  cutoff   = 70e3,
+  cutoff   = 40e3,
   offset   = c(100e3, 200e3))
 
 
@@ -350,6 +353,9 @@ run_random_cv <- function(data, covariates, mesh, spde, s.index){
       train_effects[[v]] <- train[[v]]
 
       test_effects[[v]] <- test[[v]]
+      
+      train_effects[[paste0(v,"_id")]] <- train[[paste0(v,"_id")]]
+      test_effects[[paste0(v,"_id")]]  <- test[[paste0(v,"_id")]]
     }
 
     #-----------------------------------------------------
@@ -384,9 +390,9 @@ run_random_cv <- function(data, covariates, mesh, spde, s.index){
     #-----------------------------------------------------
 
     fixed_terms <- paste(covariates, collapse = " + ")
-    ralation_term <- paste("f(", covariates, "_id, model = \"rw2\")", sep = "", collapse =  " + ")
+    ralation_term <- paste(" + f(", covariates, "_id, model = \"rw2\")", sep = "", collapse =  "")
 
-    formula <- as.formula(paste0("y ~ -1 + intercept + ", fixed_terms,
+    formula <- as.formula(paste0("y ~ -1 + intercept + ", fixed_terms, ralation_term,
                                  " + f(spatial, model = spde)"))
 
     #-----------------------------------------------------
