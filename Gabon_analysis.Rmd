@@ -220,18 +220,27 @@ effects_fixed_complete <- data.frame(
   vegetation_index        = spatial_data_gab$vegetation_index,
   dist_to_water           = spatial_data_gab$dist_to_water,
   lc_built                = spatial_data_gab$lc_built,
-  lc_trees                = spatial_data_gab$lc_trees
-  )
+  lc_trees                = spatial_data_gab$lc_trees)
 
 
 stk_est <- inla.stack(
   data = list(
-    y       = spatial_data_gab$Number_of_infected_tot_pm,
+    y       = spatial_data_gab$Number_of_infected_microscopy_tot_pf,
     Ntrials = spatial_data_gab$Number_of_participant_tot),
   A = list(A_est, 1),
   effects = list(
     spatial = 1:spde_Gabon$n.spde,
     effects_fixed),
+  tag = "est")
+
+stk_est_complete <- inla.stack(
+  data = list(
+    y       = spatial_data_gab$Number_of_infected_microscopy_tot_pf,
+    Ntrials = spatial_data_gab$Number_of_participant_tot),
+  A = list(A_est, 1),
+  effects = list(
+    spatial = 1:spde_Gabon$n.spde,
+    effects_fixed_complete),
   tag = "est")
 
 formular <- y ~ -1 + annual_rainfall_2021 + pop_density_2020 + dist_to_water + lc_built
@@ -392,7 +401,7 @@ run_random_cv <- function(data, covariates, mesh, spde, s.index){
     fixed_terms <- paste(covariates, collapse = " + ")
     ralation_term <- paste(" + f(", covariates, "_id, model = \"rw2\")", sep = "", collapse =  "")
 
-    formula <- as.formula(paste0("y ~ -1 + intercept + ", fixed_terms, ralation_term,
+    formula <- as.formula(paste0("y ~ -1 + intercept + ", fixed_terms, ralation_term, 
                                  " + f(spatial, model = spde)"))
 
     #-----------------------------------------------------
@@ -525,6 +534,66 @@ model_comparison <- do.call(
   model_comparison)
 
 print(model_comparison)
+
+model_comparison$Model[model_comparison$Model == "Model1"] = "Model1_non_linear"
+model_comparison$Model[model_comparison$Model == "Model2"] = "Model2_non_linear"
+
+
+model_comparison1 <- model_comparison
+model_comparison1$Model[model_comparison1$Model == "Model1"] = "Model1_linear"
+model_comparison1$Model[model_comparison1$Model == "Model2"] = "Model2_linear"
+
+model_comparison_final <- model_comparison |> 
+  bind_rows(model_comparison1)
+
+# Metrics you want to plot
+metrics <- c("RMSE", "MAE", "LogCPO")
+
+# Build long table
+forest_df <- bind_rows(
+  lapply(metrics, function(m){
+
+    data.frame(
+      Model  = model_comparison_final$Model,
+      Metric = m,
+      Mean   = model_comparison_final[[m]],
+      Lower  = model_comparison_final[[paste0(m, "_L")]],
+      Upper  = model_comparison_final[[paste0(m, "_U")]]
+    )
+
+  }))
+
+# Reorder models separately within each facet
+
+higher_better <- c("Correlation", "Coverage95", "LogCPO")
+
+# Identify best model in each metric
+forest_df1 <- forest_df %>%
+  group_by(Metric) %>%
+  mutate(Best = if(Metric[1] %in% higher_better) {
+    Mean == max(Mean, na.rm = TRUE)
+    } else {
+      Mean == min(Mean, na.rm = TRUE)
+    }) %>%
+  arrange(Mean, .by_group = TRUE) %>%
+  mutate(Model_ordered = factor(Model, levels = Model)) %>%
+  ungroup()
+
+Model_selec <- ggplot(forest_df1, aes(x = Mean, y = Model_ordered, colour = Best)) +
+  geom_errorbarh(aes(xmin = Lower, xmax = Upper),
+    height = 0.2,
+    linewidth = 0.8) +
+  geom_point(size = 3) +
+  facet_wrap(~ Metric, scales = "free_x") +
+  labs(title = "Model Comparison Forest Plot",
+    x = NULL, y = NULL) +
+  theme_bw() +
+  theme(strip.text = element_text(face = "bold"),
+    panel.grid.minor = element_blank())
+
+ggsave("Outputs/gab_output/Model_selection_criterials_pm.png",
+       plot = Model_selec, width = 6, height = 4, dpi = 300)
+
 ```
 
 ```{r}
@@ -548,7 +617,7 @@ for (var in vars_to_scale) {
 
 
 
-A_pred <- inla.spde.make.A(mesh = mesh, loc = st_coordinates(grid_sf_gabon))
+A_pred <- inla.spde.make.A(mesh = mesh_gabon, loc = st_coordinates(grid_sf_gabon))
 
 effects_pred <- data.frame(
     intercept               = 1,
@@ -557,24 +626,45 @@ effects_pred <- data.frame(
     dist_to_water           = grid_sf_gabon$dist_to_water,
     lc_built                = grid_sf_gabon$lc_built)
 
+effects_pred_complete <- data.frame(
+  intercept               = 1,
+  annual_rainfall_2021    = grid_sf_gabon$annual_rainfall_2021,
+  annual_temperature_2021 = grid_sf_gabon$annual_temperature_2021,
+  pop_density_2020        = grid_sf_gabon$pop_density_2020,
+  vegetation_index        = grid_sf_gabon$vegetation_index,
+  dist_to_water           = grid_sf_gabon$dist_to_water,
+  lc_built                = grid_sf_gabon$lc_built,
+  lc_trees                = grid_sf_gabon$lc_trees
+  )
+
 stk_pred <- inla.stack(
     data = list(y = NA, Ntrials = NA),
     A = list(A_pred, 1),
     effects = list(
-      spatial = 1:spde$n.spde,
+      spatial = 1:spde_Gabon$n.spde,
       effects_pred),
     tag = "pred")
 
+stk_pred_complete <- inla.stack(
+    data = list(y = NA, Ntrials = NA),
+    A = list(A_pred, 1),
+    effects = list(
+      spatial = 1:spde_Gabon$n.spde,
+      effects_pred_complete),
+    tag = "pred")
+
 stk_full <- inla.stack(stk_est, stk_pred)
+
+stk_full_complete <- inla.stack(stk_est_complete, stk_pred_complete)
   
 
-res_elevation <- inla(
-  formular,
+res_inla <- inla(
+  formular_complete,
   family = "betabinomial",
-  data = inla.stack.data(stk_full),
-  Ntrials = inla.stack.data(stk_full)$Ntrials,
+  data = inla.stack.data(stk_full_complete),
+  Ntrials = inla.stack.data(stk_full_complete)$Ntrials,
   control.predictor = list(
-    A = inla.stack.A(stk_full),
+    A = inla.stack.A(stk_full_complete),
     compute = TRUE,
     link    = 1
   ),
@@ -591,7 +681,7 @@ pred_idx <- inla.stack.index(stk_full, "pred")$data
 
 eta_mat <- inla.posterior.sample.eval(
   function() APredictor[pred_idx],
-  inla.posterior.sample(100, res_elevation))
+  inla.posterior.sample(100, res_inla))
 
 prob_mat <- plogis(eta_mat)
 
@@ -624,44 +714,52 @@ grid_sf_gabon_raster <- rasterize(
   template,
   field = c("pred_mean", "pred_q05", "pred_q95"))
 
+grid_sf_gabon_raster_pcr <- grid_sf_gabon_raster
+
+grid_sf_gabon_raster$pcr_microscop <- grid_sf_gabon_raster_pcr$pred_mean - grid_sf_gabon_raster$pred_mean
+
 terra::plot(grid_sf_gabon_raster)
 ```
+
+
 ```{r}
-vect_gab <- vect(shp_gab %>% st_transform(3857))
+vect_gab <- vect(shp_gabon %>% st_transform(3857))
 gab_pr_pm <- crop(grid_sf_gabon_raster, vect_gab)
 gab_pr_pm <- mask(gab_pr_pm, vect_gab)
 gab_pr_pm_df <- terra::extract(gab_pr_pm, vect_gab)
 gab_pr_pm_df <- gab_pr_pm_df %>% 
   group_by(ID) %>% 
-  mutate(pred_mean = mean(pred_mean, na.rm = TRUE),
-         pred_q05  = mean(pred_q05, na.rm = TRUE),
-         pred_q95  = mean(pred_q95, na.rm = TRUE),
-         CI_width  = pred_q95 - pred_q05)%>% 
+  mutate(pred_mean     = mean(pred_mean, na.rm = TRUE),
+         pred_q05      = mean(pred_q05, na.rm = TRUE),
+         pred_q95      = mean(pred_q95, na.rm = TRUE),
+         pcr_microscop = mean(pcr_microscop, na.rm = TRUE),
+         CI_width      = pred_q95 - pred_q05)%>% 
   ungroup() %>% 
   distinct()
 
 
-gab_pr_pm_shp <- shp_gab %>% 
-  mutate(PmPR     = gab_pr_pm_df$pred_mean,
-         PmPR_L   = gab_pr_pm_df$pred_q05,
-         PmPR_U   = gab_pr_pm_df$pred_q95,
-         CI_width = gab_pr_pm_df$CI_width)
+gab_pr_pm_shp <- shp_gabon %>% 
+  mutate(PmPR               = gab_pr_pm_df$pred_mean,
+         diff_pcr_microscop = gab_pr_pm_df$pcr_microscop,
+         PmPR_L             = gab_pr_pm_df$pred_q05,
+         PmPR_U             = gab_pr_pm_df$pred_q95,
+         CI_width           = gab_pr_pm_df$CI_width)
 ```
 
 
 ```{r}
 gab_admin1 <- ggplot(gab_pr_pm_shp)+
-  geom_sf(mapping = aes(fill = PmPR))+
+  geom_sf(mapping = aes(fill = diff_pcr_microscop))+
   scale_fill_stepsn(
     colours = rev(brewer.pal(5, "RdYlGn")),
-    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
-    limits = c(0, 1),
-    name = "Prevalence of P. malariae",
+    breaks = c(-0.3, -0.2, -0.1, 0, 0.1, 0.16),
+    limits = c(-1, 1),
+    name = "Difference in prevalence",
     na.value = "transparent")+
   theme_void()+
-  labs(title = "annual prevalence of P. f in Gabon using COMAL data")
+  labs(title = "Difference in prevalence estimates using PCR data vs microscopy")
 
-ggsave("Outputs/gab_output/Pf_pr_estimated/2021_gabon_pf_admin_level.png",
+ggsave("Outputs/gab_output/Pf_pr_estimated/diff_pcr_microscop_gabon_pf_admin_level.pdf",
        plot = gab_admin1, width = 6, height = 4, dpi = 300)
 
 gab_admin2 <- ggplot(gab_pr_pm_shp)+
@@ -674,9 +772,10 @@ gab_admin2 <- ggplot(gab_pr_pm_shp)+
     na.value = "transparent"
   )+
   theme_void()+
-  labs(title = "Prevalence estimates uncertainty")
+  labs(title = "Prevalence estimates uncertainty (PCR)")
 
-ggsave("Outputs/gab_output/Pf_pr_estimated/2021_gabon_pf_admin_level_uncertainty.png",
+ggsave(
+  "Outputs/gab_output/Pf_pr_estimated/2021_gabon_pf_admin_level_uncertainty_microscopy.png",
        plot = gab_admin2, width = 6, height = 4, dpi = 300)
 
 

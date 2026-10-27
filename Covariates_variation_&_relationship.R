@@ -203,14 +203,15 @@ ggplot(plot_data %>% filter((Covariate %in% bounded)),
   )
 
 selected_covariate_final <- c("annual_rainfall_2021", "annual_temperature_2021",
-                              "vegetation_index", "dist_to_water", "lc_built", "PR_Pm_tot")
+                              "vegetation_index", "dist_to_water", "pop_density_2020",
+                              "lc_built", "lc_trees", "PR_Pm_tot")
 
-spatial_data_gab_1 <- spatial_data_gab[, selected_covariate_final]
+spatial_data_gab_1 <- scaled_data[, selected_covariate_final]
 
 plot_data <- spatial_data_gab_1 %>% 
   st_drop_geometry()%>%
   pivot_longer(
-    cols = 1:4,
+    cols = 1:7,
     names_to = "Covariate",
     values_to = "Value")
 
