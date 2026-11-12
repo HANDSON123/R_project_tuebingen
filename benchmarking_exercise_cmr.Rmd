@@ -525,7 +525,14 @@ formula_intervention <- y ~ -1 + intercept +
 
 
 
-The beta‑binomial SPDE model shows strong but short‑range spatial dependence (posterior range ~ 28 km, σ ~ 1.23). The PIT histogram indicates mild right‑skew, reflecting slight underestimation of very high observed prevalence, but overall calibration is acceptable. Residual Moran’s I is significantly negative (I ~ –0.07, p ~ 0.02), consistent with localized over‑ and under‑prediction patterns produced by the short spatial range. Compared to the binomial model, the beta‑binomial likelihood reduces residual spatial autocorrelation and improves PIT calibration. Overall, the model fits well, with only minor miscalibration in the upper tail.
+The beta‑binomial SPDE model shows strong but short‑range spatial dependence 
+(posterior range ~ 28 km, σ ~ 1.23). The PIT histogram indicates mild right‑skew, 
+reflecting slight underestimation of very high observed prevalence, but overall 
+calibration is acceptable. Residual Moran’s I is significantly negative (I ~ –0.07,
+p ~ 0.02), consistent with localized over‑ and under‑prediction patterns produced by 
+the short spatial range. Compared to the binomial model, the beta‑binomial likelihood 
+reduces residual spatial autocorrelation and improves PIT calibration. Overall, 
+the model fits well, with only minor miscalibration in the upper tail.
 
 
 ```{r}

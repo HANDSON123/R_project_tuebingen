@@ -208,19 +208,8 @@ for (var in vars_to_scale) {
 
 
 ```{r}
-# coords_gabon <- coordinates(spatial_data_gab_sp)
 spatial_data_gab$lon <- coords_gabon[,1]
 spatial_data_gab$lat <- coords_gabon[,2]
-
-# spatial_data_gab <- spatial_data_gab %>% 
-#   mutate(annual_rainfall_2021_id    = inla.group(annual_rainfall_2021, n = 21),
-#          annual_temperature_2021_id = inla.group(annual_temperature_2021, n = 21),
-#          vegetation_index_id        = inla.group(vegetation_index, n = 21),
-#          pop_density_2020_id        = inla.group(pop_density_2020, n = 21),
-#          dist_to_water_id           = inla.group(dist_to_water, n = 21),
-#          lc_built_id                = inla.group(lc_built, n = 21),
-#          lc_trees_id                = inla.group(lc_trees, n = 21))
-
 
 nl_vars <- c(
     "annual_rainfall_2021",
@@ -783,9 +772,6 @@ ggsave("Outputs/gab_output/Model_selection_criterials_PF.png",
 
 
 ```{r}
-# nl_vars <- c("annual_rainfall_2021", "annual_temperature_2021",
-#              "pop_density_2020", "dist_to_water")
-
 
 nl_vars <- c(
     "vegetation_index",
@@ -799,7 +785,7 @@ for (var in vars_to_scale) {
   sd_val   <- scaling_stats[[var]]["sd"]
   
   grid_sf_gabon[[var]] <- (grid_sf_gabon[[var]] - mean_val) / sd_val
-}
+  }
 
 # Flag cells inside or outside the sampled range
 
@@ -879,15 +865,6 @@ stk_full <- inla.stack(stk_est, stk_pred)
 
 
 ```{r}
-
-# rw2_prior <- list(prec = list(prior = "pc.prec", param = c(1, 0.01)))
-
-# formula <- y ~ -1 + intercept +
-#   f(annual_rainfall_2021_id,    model = "rw2", scale.model = TRUE, hyper = rw2_prior) +
-#   f(annual_temperature_2021_id, model = "rw2", scale.model = TRUE, hyper = rw2_prior) +
-#   f(pop_density_2020_id,        model = "rw2", scale.model = TRUE, hyper = rw2_prior) +
-#   f(dist_to_water_id,           model = "rw2", scale.model = TRUE, hyper = rw2_prior) +
-#   f(spatial, model = spde_Gabon)
 
 # rw2_prior <- list(prec = list(prior = "pc.prec", param = c(1, 0.01)))
 
