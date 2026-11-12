@@ -51,6 +51,7 @@ library(rmapshaper)
 library(tidytext)
 library(AER) #over dispersion package
 library(fmesher)
+library(Hmisc)
 ```
 
 
@@ -76,7 +77,6 @@ con_vect <- vect(shp_con)
 gab_vect <- vect(shp_gab)
 
 sampled_data_join_sf <- st_read("data/Africa_data/sampled_data_join_sf.gpkg")
-spatial_data_gab     <- st_read("data/gab_data/GAB_df_1_sf.gpkg")
 
 ```
 
@@ -93,7 +93,11 @@ sampled_data_join_sf_scale <- sampled_data_join_sf %>%
          pop_density_2020        = as.numeric(scale(pop_density_2020)),
          dist_to_water           = as.numeric(scale(dist_to_water)),
          elevation               = as.numeric(scale(elevation)),
-         vegetation_index        = as.numeric(scale(vegetation_index)))
+         vegetation_index        = as.numeric(scale(vegetation_index)),
+         lc_water                = as.numeric(scale(lc_water)),
+         lc_built                = as.numeric(scale(lc_built)),
+         lc_wetland              = as.numeric(scale(lc_wetland)),
+         lc_cropland             = as.numeric(scale(lc_cropland)))
 
 
 glm_binom1 <- glm(
@@ -108,31 +112,11 @@ phi <- sum(pearson_res1^2) / glm_binom1$df.residual
 
 phi
 
-spatial_data_gab <- sampled_data_join_sf %>% 
-  mutate(annual_rainfall_2021    = as.numeric(scale(annual_rainfall_2021)),
-         annual_temperature_2021 = as.numeric(scale(annual_temperature_2021)),
-         pop_density_2020        = as.numeric(scale(pop_density_2020)),
-         dist_to_water           = as.numeric(scale(dist_to_water)),
-         elevation               = as.numeric(scale(elevation)),
-         vegetation_index        = as.numeric(scale(vegetation_index)))
-
-
-glm_binom1 <- glm(
-  cbind(Number_of_infected_tot_pm, Number_of_participant_tot - Number_of_infected_tot_pm) ~ 1,
-  family = "binomial",
-  data = spatial_data_gab
-)
-
-pearson_res1 <- residuals(glm_binom1, type = "pearson")
-
-phi <- sum(pearson_res1^2) / glm_binom1$df.residual
-
-phi
 
 glm_binom2 <- glm(
   cbind(Number_of_infected_tot_pm, Number_of_participant_tot - Number_of_infected_tot_pm) ~
     annual_rainfall_2021 + pop_density_2020 + dist_to_water + lc_trees + annual_temperature_2021 +
-    lc_built + vegetation_index,
+    vegetation_index,
   family = "binomial",
   data = spatial_data_gab
 )
@@ -145,8 +129,8 @@ phi
 ```
 - With no covariate, the dispersion coefficient is greater than 6 which is a 
 clear sign of over dispersion and even when we add covariate, the coefficient 
-is still high (3.5). Therefore, the variation in the observed data is more than what is
-expected under the binomial model.
+is 1.81. Therefore, the variation in the observed data can be explain by the 
+covariates and also when we will add the spatial field.
 
 
 
@@ -154,25 +138,8 @@ expected under the binomial model.
 num_vars <- sampled_data_join_sf %>% 
   st_drop_geometry() %>% 
   dplyr::select(c(
-  "annual_rainfall_2021", "annual_temperature_2021", "elevation", "vegetation_index",
-  "pop_density_2020", "dist_to_water", "lc_water", "lc_trees", "annual_ITN_usage_2021",
-  "lc_built", "lc_cropland", "lc_wetland"))
-
-num_vars_1 <- sampled_data_join_sf %>% 
-  st_drop_geometry() %>% 
-  dplyr::select(c("dist_to_water", "PR_Pm_tot"))
-
-M1 <- cor(num_vars_1, use = "pairwise.complete.obs")
-
-corrplot(
-  M1,
-  method = "color",
-  type = "upper",
-  addCoef.col = "black",   
-  tl.col = "black",
-  tl.srt = 45,
-  number.cex = 0.7
-)
+  "annual_rainfall_2021", "annual_temperature_2021", "vegetation_index",
+  "pop_density_2020", "dist_to_water", "lc_trees"))
 
 
 M <- cor(num_vars, use = "pairwise.complete.obs")
@@ -187,61 +154,76 @@ corrplot(
   number.cex = 0.7
 )
 
-var1 <- ggcorrplot(
-  M,
-  type = "full",
-  legend.title = "Correlation Matrix",
-  lab = TRUE,
-  lab_size = 3,
-  colors = c("blue", "white", "red"),
-  outline.color = "white",
-  show.diag = TRUE       
-) +
-  scale_x_discrete(name = NULL) +
-  scale_y_discrete(name = NULL) +
-  theme_minimal() +
-  theme(
-    panel.grid = element_blank(),      
-    panel.background = element_rect(fill = "white", color = NA),
-    axis.text.x = element_text(angle = 45, hjust = 1)
-  )
-
-ggsave("Outputs/correlation_matrix.png", var1, dpi = 300, width = 6, height = 4)
-
-num_vars_selected <- sampled_data_join_sf %>% 
-  st_drop_geometry() %>% 
-  dplyr::select(c(
-  "annual_rainfall_2021", "pop_density_2020", "dist_to_water", "lc_water", "lc_trees",
-  "lc_built", "lc_cropland", "lc_wetland"))
-
-M_selected <- cor(num_vars_selected, use = "pairwise.complete.obs")
-
-corrplot(
-  M_selected,
-  method = "color",
-  type = "upper",
-  addCoef.col = "black",   
-  tl.col = "black",
-  tl.srt = 45,
-  number.cex = 0.7
-)
+# var1 <- ggcorrplot(
+#   M,
+#   type = "full",
+#   legend.title = "Correlation Matrix",
+#   lab = TRUE,
+#   lab_size = 3,
+#   colors = c("blue", "white", "red"),
+#   outline.color = "white",
+#   show.diag = TRUE       
+# ) +
+#   scale_x_discrete(name = NULL) +
+#   scale_y_discrete(name = NULL) +
+#   theme_minimal() +
+#   theme(
+#     panel.grid = element_blank(),      
+#     panel.background = element_rect(fill = "white", color = NA),
+#     axis.text.x = element_text(angle = 45, hjust = 1)
+#   )
+# 
+# ggsave("Outputs/correlation_matrix.png", var1, dpi = 300, width = 6, height = 4)
+# 
+# num_vars_selected <- sampled_data_join_sf %>% 
+#   st_drop_geometry() %>% 
+#   dplyr::select(c(
+#   "annual_rainfall_2021", "pop_density_2020", "dist_to_water", "vegetation_index", "lc_trees",
+#   "annual_temperature_2021"))
+# 
+# M_selected <- cor(num_vars_selected, use = "pairwise.complete.obs")
+# 
+# corrplot(
+#   M_selected,
+#   method = "color",
+#   type = "upper",
+#   addCoef.col = "black",   
+#   tl.col = "black",
+#   tl.srt = 45,
+#   number.cex = 0.7
+# )
 
 fit <- lm(
-  PR_Pm_tot ~ annual_rainfall_2021 + 
-    annual_temperature_2021 + elevation + vegetation_index + pop_density_2020 + 
-    dist_to_water + lc_water + lc_trees + lc_built + lc_cropland + lc_wetland + annual_ITN_usage_2021,
+  PR_Pm_tot ~ annual_rainfall_2021 + annual_temperature_2021 + vegetation_index 
+  + pop_density_2020 + dist_to_water + lc_trees,
   data = sampled_data_join_sf
 )
 
 vif(fit)
 
 fit1 <- lm(
-  PR_Pm_tot ~ annual_rainfall_2021 + pop_density_2020 + dist_to_water + lc_water
-  + lc_trees + lc_built + lc_cropland + lc_wetland + vegetation_index, 
+  PR_Pm_tot ~ annual_rainfall_2021 + pop_density_2020 + dist_to_water + lc_trees 
+  + vegetation_index, 
   data = sampled_data_join_sf
 )
 
 vif(fit1)
+
+fit1 <- lm(
+  PR_Pm_tot ~ annual_rainfall_2021 + pop_density_2020 + dist_to_water + lc_trees 
+  + vegetation_index, 
+  data = sampled_data_join_sf
+)
+
+vif(fit1)
+
+fit2 <- lm(
+  PR_Pm_tot ~ pop_density_2020 + annual_temperature_2021 + dist_to_water + lc_trees 
+  + vegetation_index, 
+  data = sampled_data_join_sf
+)
+
+vif(fit2)
 
 ```
 
@@ -297,9 +279,6 @@ The p‑value is very high : no evidence of spatial autocorrelation.
 
 The negative sign is tiny : not meaningful.
 
-```{r}
-  
-```
 
 
 # prepare data for the continental level estimation
@@ -376,8 +355,8 @@ spde_Africa <- inla.spde2.pcmatern(
 A_est <- inla.spde.make.A(mesh_Africa, loc = coords_Africa)
 
 #1. Variables to be scale
-vars_to_scale <- c("annual_rainfall_2021", "annual_temperature_2021", 
-                   "pop_density_2020", "dist_to_water", "elevation")
+vars_to_scale <- c("annual_rainfall_2021", "annual_temperature_2021", "lc_trees",
+                   "pop_density_2020", "dist_to_water", "vegetation_index")
 
 # 2. Create a named list to store the training parameters (Means and SDs)
 scaling_stats <- list()

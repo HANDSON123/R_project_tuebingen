@@ -977,7 +977,7 @@ res_pred_intervention <- inla(
 
 
 set.seed(123)
-samples <- inla.posterior.sample(100, res_pred_intervention)
+samples <- inla.posterior.sample(500, res_pred_intervention)
 
 idx_pred <- inla.stack.index(stk_full_intervention, tag = "pred")$data
 
@@ -1015,7 +1015,7 @@ cmr_prev_1 <- ggplot(shp_cmr) +
   geom_sf(fill = NA)+
   scale_fill_stepsn(
     colours = (brewer.pal(5, "YlOrRd")),
-    breaks = c(0, 0.2, 0.4, 0.6, 0.8, 1),
+    breaks = c(0, 0.1, 0.2, 0.3, 0.4, 0.5),
     na.value = "transparent",
     name = "annual prevalence of P. f")+
   theme_void()+
@@ -1139,7 +1139,7 @@ cmr_prev_3 <- ggplot(prev_dat_cmr_2011_sf) +
     legend.title = element_text(size = 15)
   )
 
-ggsave("Outputs/cmr_output/MAP_pr_modeled/2011_cmr_pr_map_pf_all_age_admin2_mix.pdf",
+ggsave("Outputs/cmr_output/MAP_pr_modeled/2011_cmr_pr_map_pf_all_age_admin2_mix.png",
        plot = cmr_prev_3, width = 6, height = 4, dpi = 300)
 
 
@@ -1164,7 +1164,7 @@ cmr_prev_4 <- ggplot(prev_dat_cmr_2011_sf_test) +
   )
 
 
-ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_pf_all_age_admin2_with_intervention_mix.png",
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_pf_all_age_admin2_with_intervention_mix.pdf",
        plot = cmr_prev_4, width = 6, height = 4, dpi = 300)
 
 prev_dat_cmr_2011_sf_test$PfPR_map <- prev_dat_cmr_2011_sf$PR_all_age
@@ -1221,7 +1221,7 @@ mapshot(map1,
         file = "Outputs/cmr_output/Pf_pr_estimated/difference_prev_MAP_vsour_model_mix.html",
         selfcontained = T)
 
-ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_diff_pf_all_age_admin2_with_intervention_mix.pdf",
+ggsave("Outputs/cmr_output/Pf_pr_estimated/2011_cmr_pr_diff_pf_all_age_admin2_with_intervention_mix.png",
        plot = cmr_prev_5, width = 6, height = 4, dpi = 300)
 
 ```
